@@ -1,4 +1,4 @@
-# client/ui/screens/lobby.py
+# client/ui/screens/game_lobby.py
 """
 Game Lobby Screen
 Pre-game lobby with player list and start game button.
@@ -19,15 +19,15 @@ class GameLobbyScreen(UIScreen):
         self.back_button = Button(
             20, SCREEN_HEIGHT - 70, 120, 50, "Leave", self.leave_lobby
         )
-
-        # Navigation buttons
+        
+        # Profile button
         self.profile_button = Button(
-            20, SCREEN_HEIGHT - 70, 120, 50, "Profile", self.go_to_profile
+            150, SCREEN_HEIGHT - 70, 120, 50, "Profile", self.go_to_profile
         )
         
         # Settings button
         self.settings_button = Button(
-            150, SCREEN_HEIGHT - 70, 120, 50, "Settings", self.go_to_settings
+            280, SCREEN_HEIGHT - 70, 120, 50, "Settings", self.go_to_settings
         )
         
         # Ready/Start button
@@ -46,9 +46,10 @@ class GameLobbyScreen(UIScreen):
         super().on_enter()
         self.is_ready = False
         
-        # Join lobby
-        if self.manager.game.game_state.get_state_dict().get("user_id"):
+        # Join lobby only if we don't have a player_id yet
+        if self.manager.game.game_state.user_id and not self.manager.game.game_state.player_id:
             self.manager.game.network.send_join_lobby()
+            print("[Lobby] Sent join lobby request")
     
     def leave_lobby(self):
         """Leave the lobby."""
@@ -65,7 +66,7 @@ class GameLobbyScreen(UIScreen):
     def go_to_settings(self):
         """Navigate to settings screen."""
         self.manager.switch_to("settings")
-
+    
     def toggle_ready(self):
         """Toggle ready status."""
         self.is_ready = not self.is_ready
@@ -83,9 +84,9 @@ class GameLobbyScreen(UIScreen):
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""
         self.back_button.handle_event(event)
-        self.ready_button.handle_event(event)
         self.profile_button.handle_event(event)
         self.settings_button.handle_event(event)
+        self.ready_button.handle_event(event)
     
     def render(self, screen: pygame.Surface):
         """Render the lobby screen."""
@@ -144,9 +145,9 @@ class GameLobbyScreen(UIScreen):
         
         # Buttons
         self.back_button.render(screen)
-        self.ready_button.render(screen)
         self.profile_button.render(screen)
         self.settings_button.render(screen)
+        self.ready_button.render(screen)
         
         # Ready status
         status_font = pygame.font.Font(None, 24)

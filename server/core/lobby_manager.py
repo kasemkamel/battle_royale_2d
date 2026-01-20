@@ -30,6 +30,12 @@ class LobbyManager:
         if not user:
             return None
         
+        # Check if player already exists in lobby (prevent duplicates)
+        for existing_player in self.players.values():
+            if existing_player.user_id == user_id:
+                print(f"[Lobby] Player {user.username} already in lobby, skipping duplicate")
+                return existing_player
+        
         # Create player
         player_id = self.next_player_id
         self.next_player_id += 1
@@ -79,14 +85,21 @@ class LobbyManager:
             self.countdown_start = time.time()
             print(f"[Lobby] Match starting in {self.countdown_duration} seconds...")
     
-    def update(self):
-        """Update lobby state (check countdown)."""
+    def update(self) -> bool:
+        """
+        Update lobby state (check countdown).
+        Returns True if lobby state changed and should be broadcast.
+        """
         if not self.match_starting:
-            return
+            return False
         
         # Check if countdown finished
         if time.time() - self.countdown_start >= self.countdown_duration:
             self._start_match()
+            return False  # Match started, lobby cleared
+        
+        # Countdown is active, state should be broadcast
+        return True
     
     def _start_match(self):
         """Start the match with current lobby players."""
@@ -117,6 +130,7 @@ class LobbyManager:
             "players": [
                 {
                     "player_id": p.player_id,
+                    "user_id": p.user_id,  # Include user_id for client matching
                     "username": p.username,
                     "ready": p.ready
                 }

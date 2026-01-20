@@ -46,8 +46,22 @@ class GameServer:
     
     async def _lobby_update_loop(self):
         """Update lobby state periodically."""
+        from shared.packets import LobbyState
+        
         while self.is_running:
-            self.lobby_manager.update()
+            # Update lobby and check if state changed
+            state_changed = self.lobby_manager.update()
+            
+            # Broadcast lobby state if countdown is active
+            if state_changed:
+                lobby_data = self.lobby_manager.get_lobby_state()
+                lobby_packet = LobbyState(
+                    players=lobby_data["players"],
+                    match_starting=lobby_data["match_starting"],
+                    countdown=lobby_data["countdown"]
+                )
+                await self.socket.broadcast(lobby_packet)
+            
             await asyncio.sleep(1.0)  # Update every second
     
     def stop(self):

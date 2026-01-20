@@ -38,6 +38,7 @@ class HomeScreen(UIScreen):
             center_x + 10, 400, 140, 50, "Register", self.on_register
         )
         
+        # Navigation buttons removed - now in lobby screen
         
         # Status message
         self.status_message = ""
@@ -85,7 +86,8 @@ class HomeScreen(UIScreen):
         # Send register request
         self.manager.game.network.send_register(username, password)
         self.show_status("Registering...", (255, 255, 100))
-
+    
+    # Navigation methods removed - now in lobby screen
     
     def show_status(self, message: str, color: tuple = (255, 255, 255)):
         """Show status message."""
@@ -98,7 +100,6 @@ class HomeScreen(UIScreen):
         self.password_input.handle_event(event)
         self.login_button.handle_event(event)
         self.register_button.handle_event(event)
-        
     
     def render(self, screen: pygame.Surface):
         """Render the home screen."""
@@ -117,7 +118,6 @@ class HomeScreen(UIScreen):
         # Buttons
         self.login_button.render(screen)
         self.register_button.render(screen)
-        
         
         # Status message
         if self.status_message:

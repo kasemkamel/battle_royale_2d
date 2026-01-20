@@ -47,6 +47,15 @@ class MatchManager:
         match.start()
         self.active_match = match
         
+        # Send GAME_START packet to all clients
+        from shared.packets import Packet
+        from shared.enums import PacketType
+        game_start_packet = Packet(PacketType.GAME_START, {
+            "match_id": match_id,
+            "message": "Match is starting!"
+        })
+        asyncio.create_task(self.server.socket.broadcast(game_start_packet))
+        
         # Start game loop if not running
         if not self.is_running:
             asyncio.create_task(self._game_loop())

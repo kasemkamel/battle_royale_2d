@@ -106,7 +106,7 @@ class Game:
             
             # Switch to lobby
             self.ui_manager.switch_to("lobby")
-        else: 
+        else:
             self.home_screen.show_status(message, (255, 100, 100))
     
     def _handle_register_response(self, packet):
@@ -121,6 +121,15 @@ class Game:
     
     def _handle_lobby_state(self, packet):
         """Handle lobby state update."""
+        # Update player_id if we're in the lobby
+        players_in_lobby = packet.data.get("players", [])
+        if not self.game_state.player_id and self.game_state.user_id:
+            # Find our player in the lobby
+            for player_data in players_in_lobby:
+                if player_data.get("user_id") == self.game_state.user_id:
+                    self.game_state.set_player_id(player_data.get("player_id"))
+                    break
+        
         self.lobby_screen.update_lobby_state(packet.data)
     
     def _handle_game_start(self, packet):

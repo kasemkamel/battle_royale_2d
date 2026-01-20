@@ -80,6 +80,12 @@ class ServerPacketHandler:
         if not client.user_id:
             return
         
+        # If client already has a player_id, don't add again
+        if client.player_id:
+            print(f"[Server] Client {client.conn_id} already has player_id {client.player_id}")
+            await self._broadcast_lobby_state()
+            return
+        
         # Add player to lobby
         player = self.server.lobby_manager.add_player(client.user_id, client.conn_id)
         if player:
