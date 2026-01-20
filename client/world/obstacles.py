@@ -1,0 +1,1 @@
+# client/world/obstacles.py

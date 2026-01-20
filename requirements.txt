@@ -1,0 +1,14 @@
+# requirements.txt
+# 2D Battle Royale Game - Python Dependencies
+
+# Core dependencies
+pygame-ce>=2.5.0          # Game rendering and input handling
+msgspec==0.20.0           # Fast binary serialization for network packets
+
+# Optional: Better UI (uncomment if you want to use)
+# tkinter is built-in, no need to install
+
+# Development dependencies (optional)
+# pytest==7.4.3        # For unit testing
+# black==23.12.1       # Code formatting
+# pylint==3.0.3        # Code linting
