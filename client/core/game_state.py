@@ -18,6 +18,7 @@ class ClientGameState:
         self.user_id = None
         self.username = None
         self.stats = {}
+        self.user_data = {}  # Additional user data (skill loadout, etc.)
         
         # Player data
         self.player_id = None

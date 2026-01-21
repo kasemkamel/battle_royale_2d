@@ -11,6 +11,7 @@ from server.auth.database import Database
 from server.auth.authenticator import Authenticator
 from server.core.lobby_manager import LobbyManager
 from server.core.match_manager import MatchManager
+from server.skills.skill_database import get_skill_database
 
 
 class GameServer:
@@ -23,6 +24,9 @@ class GameServer:
         self.authenticator = Authenticator(self.database)
         self.lobby_manager = LobbyManager(self)
         self.match_manager = MatchManager(self)
+        
+        # Load skill database
+        self.skill_database = get_skill_database()
         
         # Set up packet handler
         self.packet_handler = ServerPacketHandler(self)

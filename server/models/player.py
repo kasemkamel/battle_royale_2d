@@ -9,7 +9,8 @@ import math
 from shared.enums import PlayerState, CharacterClass
 from shared.constants import (
     PLAYER_MAX_HEALTH, PLAYER_SPEED, PLAYER_MAX_MANA, PLAYER_MANA_REGEN,
-    PLAYER_SPRINT_MULTIPLIER, PLAYER_DASH_SPEED, PLAYER_DASH_DURATION, PLAYER_DASH_COOLDOWN
+    PLAYER_SPRINT_MULTIPLIER, PLAYER_SPRINT_MANA_COST,
+    PLAYER_DASH_SPEED, PLAYER_DASH_DURATION, PLAYER_DASH_COOLDOWN, PLAYER_DASH_MANA_COST
 )
 
 
@@ -107,8 +108,15 @@ class Player:
         # Calculate speed with modifiers
         base_speed = PLAYER_SPEED
         
+        # Sprint consumes mana
         if self.is_sprinting:
-            base_speed *= PLAYER_SPRINT_MULTIPLIER
+            mana_cost = PLAYER_SPRINT_MANA_COST * delta_time
+            if self.mana >= mana_cost:
+                base_speed *= PLAYER_SPRINT_MULTIPLIER
+                self.mana -= mana_cost
+            else:
+                # Not enough mana, disable sprint
+                self.is_sprinting = False
         
         base_speed *= self.movement_speed_multiplier  # Apply slows/buffs
         
@@ -197,10 +205,16 @@ class Player:
             return False
         if self.is_stunned:
             return False
+        if self.mana < PLAYER_DASH_MANA_COST:
+            return False
         return True
     
     def start_dash(self):
         """Start dash in direction of mouse cursor."""
+        # Check mana
+        if self.mana < PLAYER_DASH_MANA_COST:
+            return
+        
         # Calculate dash direction
         dx = self.mouse_x - self.x
         dy = self.mouse_y - self.y
@@ -214,11 +228,14 @@ class Player:
             self.dash_direction_x = math.cos(self.rotation)
             self.dash_direction_y = math.sin(self.rotation)
         
+        # Consume mana
+        self.mana -= PLAYER_DASH_MANA_COST
+        
         self.is_dashing = True
         self.dash_end_time = time.time() + PLAYER_DASH_DURATION
         self.dash_cooldown_end = time.time() + PLAYER_DASH_COOLDOWN
         
-        print(f"[Player] {self.username} dashed")
+        print(f"[Player] {self.username} dashed (mana: {self.mana:.1f})")
     
     def apply_crowd_control(self, cc_type: str, duration: float, intensity: float = 1.0):
         """Apply crowd control effect."""

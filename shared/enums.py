@@ -40,6 +40,12 @@ class PacketType(Enum):
     PLAYER_DIED = auto()
     PLAYER_RESPAWN = auto()
     
+    # Skills
+    GET_ALL_SKILLS = auto()
+    ALL_SKILLS_RESPONSE = auto()
+    UPDATE_SKILL_LOADOUT = auto()
+    SKILL_LOADOUT_RESPONSE = auto()
+    
     # Chat
     CHAT_MESSAGE = auto()
     

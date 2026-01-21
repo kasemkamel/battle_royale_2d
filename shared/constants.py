@@ -28,12 +28,14 @@ PLAYER_WIDTH = 40
 PLAYER_HEIGHT = 40
 PLAYER_SPEED = 200  # Pixels per second (base speed)
 PLAYER_SPRINT_MULTIPLIER = 1.5  # Sprint is 50% faster
+PLAYER_SPRINT_MANA_COST = 5  # Mana per second while sprinting
 PLAYER_DASH_SPEED = 800  # Dash speed in pixels/second
 PLAYER_DASH_DURATION = 0.2  # Dash lasts 0.2 seconds
 PLAYER_DASH_COOLDOWN = 3.0  # Dash cooldown in seconds
+PLAYER_DASH_MANA_COST = 15  # Mana cost per dash
 PLAYER_MAX_HEALTH = 100
 PLAYER_MAX_MANA = 100
-PLAYER_MANA_REGEN = 10  # Mana per second
+PLAYER_MANA_REGEN = 0  # Mana per second
 PLAYER_RESPAWN_TIME = 5  # Seconds
 
 # Match Configuration

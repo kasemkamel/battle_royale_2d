@@ -14,6 +14,7 @@ from client.ui.screens.profile import ProfileScreen
 from client.ui.screens.settings import SettingsScreen
 from client.ui.screens.game_lobby import GameLobbyScreen
 from client.ui.screens.game_screen import GameScreen
+from client.ui.screens.skill_select import SkillSelectionScreen
 from shared.constants import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, GAME_TITLE
 from shared.enums import PacketType
 
@@ -50,12 +51,14 @@ class Game:
         self.settings_screen = SettingsScreen(self.ui_manager)
         self.lobby_screen = GameLobbyScreen(self.ui_manager)
         self.game_screen = GameScreen(self.ui_manager)
+        self.skill_select_screen = SkillSelectionScreen(self.ui_manager)
         
         self.ui_manager.add_screen("home", self.home_screen)
         self.ui_manager.add_screen("profile", self.profile_screen)
         self.ui_manager.add_screen("settings", self.settings_screen)
         self.ui_manager.add_screen("lobby", self.lobby_screen)
         self.ui_manager.add_screen("game", self.game_screen)
+        self.ui_manager.add_screen("skills", self.skill_select_screen)
         
         # Start on home screen
         self.ui_manager.switch_to("home")
@@ -81,6 +84,8 @@ class Game:
             PacketType.GAME_START: self._handle_game_start,
             PacketType.WORLD_STATE: self._handle_world_state,
             PacketType.MATCH_END: self._handle_match_end,
+            PacketType.ALL_SKILLS_RESPONSE: self._handle_all_skills,
+            PacketType.SKILL_LOADOUT_RESPONSE: self._handle_skill_loadout_response,
         }
         
         handler = handlers.get(packet.type)
@@ -99,9 +104,16 @@ class Game:
         if success:
             user_id = packet.data.get("user_id")
             stats = packet.data.get("stats", {})
+            skill_loadout = packet.data.get("skill_loadout", [])
             username = self.home_screen.username_input.text.strip()
             
             self.game_state.login(user_id, username, stats)
+            
+            # Store skill loadout
+            self.game_state.user_data = {
+                "skill_loadout": skill_loadout
+            }
+            
             self.home_screen.show_status("Login successful!", (0, 255, 0))
             
             # Switch to lobby
@@ -160,6 +172,18 @@ class Game:
         
         # Return to lobby
         self.ui_manager.switch_to("lobby")
+    
+    def _handle_all_skills(self, packet):
+        """Handle all skills response."""
+        skills = packet.data.get("skills", [])
+        self.skill_select_screen.receive_all_skills(skills)
+    
+    def _handle_skill_loadout_response(self, packet):
+        """Handle skill loadout save response."""
+        success = packet.data.get("success")
+        message = packet.data.get("message")
+        loadout = packet.data.get("skill_loadout", [])
+        self.skill_select_screen.on_save_response(success, message, loadout)
     
     def run(self):
         """Main game loop."""

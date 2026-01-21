@@ -30,6 +30,8 @@ class ServerPacketHandler:
             PacketType.PLAYER_INPUT: self._handle_player_input,
             PacketType.CHAT_MESSAGE: self._handle_chat,
             PacketType.PING: self._handle_ping,
+            PacketType.GET_ALL_SKILLS: self._handle_get_all_skills,
+            PacketType.UPDATE_SKILL_LOADOUT: self._handle_update_skill_loadout,
         }
         
         handler = handlers.get(packet.type)
@@ -53,6 +55,8 @@ class ServerPacketHandler:
                 user_id=user.user_id,
                 stats=user.stats
             )
+            # Add skill loadout to response
+            response.data["skill_loadout"] = user.skill_loadout
         else:
             response = LoginResponse(success=False, message=message)
         
@@ -140,6 +144,48 @@ class ServerPacketHandler:
         """Handle ping request."""
         pong = Packet(PacketType.PONG, {"timestamp": packet.data.get("timestamp")})
         await client.send(pong)
+    
+    async def _handle_get_all_skills(self, client: ClientConnection, packet: Packet):
+        """Send all available skills to client."""
+        all_skills = self.server.skill_database.get_all_skills()
+        
+        response = Packet(PacketType.ALL_SKILLS_RESPONSE, {
+            "skills": all_skills
+        })
+        await client.send(response)
+    
+    async def _handle_update_skill_loadout(self, client: ClientConnection, packet: Packet):
+        """Update player's skill loadout."""
+        if not client.user_id:
+            return
+        
+        skill_ids = packet.data.get("skill_loadout", [])
+        
+        # Validate loadout
+        is_valid, error_msg = self.server.skill_database.validate_skill_loadout(skill_ids)
+        
+        if not is_valid:
+            response = Packet(PacketType.SKILL_LOADOUT_RESPONSE, {
+                "success": False,
+                "message": error_msg
+            })
+            await client.send(response)
+            return
+        
+        # Update in database
+        self.server.database.update_skill_loadout(client.user_id, skill_ids)
+        
+        # Update user session
+        user = self.server.authenticator.get_session(client.user_id)
+        if user:
+            user.skill_loadout = skill_ids
+        
+        response = Packet(PacketType.SKILL_LOADOUT_RESPONSE, {
+            "success": True,
+            "message": "Skill loadout updated",
+            "skill_loadout": skill_ids
+        })
+        await client.send(response)
     
     async def _broadcast_lobby_state(self):
         """Send lobby state to all lobby players."""

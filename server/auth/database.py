@@ -32,6 +32,7 @@ class Database:
                 salt TEXT NOT NULL,
                 email TEXT,
                 stats TEXT,
+                skill_loadout TEXT DEFAULT '[]',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -79,7 +80,7 @@ class Database:
         """Retrieve user by username."""
         cursor = self.connection.cursor()
         cursor.execute('''
-            SELECT user_id, username, password_hash, salt, email, stats
+            SELECT user_id, username, password_hash, salt, email, stats, skill_loadout
             FROM users WHERE username = ?
         ''', (username,))
         
@@ -87,7 +88,7 @@ class Database:
         if not row:
             return None
         
-        return User(
+        user = User(
             user_id=row[0],
             username=row[1],
             password_hash=row[2],
@@ -95,12 +96,15 @@ class Database:
             email=row[4],
             stats=json.loads(row[5]) if row[5] else {}
         )
+        # Add skill loadout
+        user.skill_loadout = json.loads(row[6]) if row[6] else []
+        return user
     
     def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Retrieve user by ID."""
         cursor = self.connection.cursor()
         cursor.execute('''
-            SELECT user_id, username, password_hash, salt, email, stats
+            SELECT user_id, username, password_hash, salt, email, stats, skill_loadout
             FROM users WHERE user_id = ?
         ''', (user_id,))
         
@@ -108,7 +112,7 @@ class Database:
         if not row:
             return None
         
-        return User(
+        user = User(
             user_id=row[0],
             username=row[1],
             password_hash=row[2],
@@ -116,6 +120,8 @@ class Database:
             email=row[4],
             stats=json.loads(row[5]) if row[5] else {}
         )
+        user.skill_loadout = json.loads(row[6]) if row[6] else []
+        return user
     
     def update_user_stats(self, user_id: int, stats: dict):
         """Update user statistics."""
@@ -124,6 +130,15 @@ class Database:
             UPDATE users SET stats = ? WHERE user_id = ?
         ''', (json.dumps(stats), user_id))
         self.connection.commit()
+    
+    def update_skill_loadout(self, user_id: int, skill_loadout: list):
+        """Update user's skill loadout."""
+        cursor = self.connection.cursor()
+        cursor.execute('''
+            UPDATE users SET skill_loadout = ? WHERE user_id = ?
+        ''', (json.dumps(skill_loadout), user_id))
+        self.connection.commit()
+        print(f"[Database] Updated skill loadout for user {user_id}: {skill_loadout}")
     
     def close(self):
         """Close database connection."""

@@ -27,6 +27,7 @@ class User:
             "total_damage": 0,
             "total_playtime": 0
         }
+        self.skill_loadout = []  # List of skill IDs (max 4)
     
     @staticmethod
     def hash_password(password: str, salt: str = None) -> tuple:
@@ -63,7 +64,8 @@ class User:
             "user_id": self.user_id,
             "username": self.username,
             "email": self.email,
-            "stats": self.stats.copy()
+            "stats": self.stats.copy(),
+            "skill_loadout": self.skill_loadout.copy()
         }
         
         if include_sensitive:

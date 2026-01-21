@@ -20,14 +20,19 @@ class GameLobbyScreen(UIScreen):
             20, SCREEN_HEIGHT - 70, 120, 50, "Leave", self.leave_lobby
         )
         
+        # Skills button
+        self.skills_button = Button(
+            150, SCREEN_HEIGHT - 70, 120, 50, "Skills", self.go_to_skills
+        )
+        
         # Profile button
         self.profile_button = Button(
-            150, SCREEN_HEIGHT - 70, 120, 50, "Profile", self.go_to_profile
+            280, SCREEN_HEIGHT - 70, 120, 50, "Profile", self.go_to_profile
         )
         
         # Settings button
         self.settings_button = Button(
-            280, SCREEN_HEIGHT - 70, 120, 50, "Settings", self.go_to_settings
+            410, SCREEN_HEIGHT - 70, 120, 50, "Settings", self.go_to_settings
         )
         
         # Ready/Start button
@@ -61,6 +66,10 @@ class GameLobbyScreen(UIScreen):
         
         self.manager.game.network.send(Packet(PacketType.LEAVE_LOBBY))
         self.manager.switch_to("home")
+    
+    def go_to_skills(self):
+        """Navigate to skill selection screen."""
+        self.manager.switch_to("skills")
     
     def go_to_profile(self):
         """Navigate to profile screen."""
@@ -98,6 +107,7 @@ class GameLobbyScreen(UIScreen):
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""
         self.back_button.handle_event(event)
+        self.skills_button.handle_event(event)
         self.profile_button.handle_event(event)
         self.settings_button.handle_event(event)
         self.ready_button.handle_event(event)
@@ -159,6 +169,7 @@ class GameLobbyScreen(UIScreen):
         
         # Buttons
         self.back_button.render(screen)
+        self.skills_button.render(screen)
         self.profile_button.render(screen)
         self.settings_button.render(screen)
         self.ready_button.render(screen)
