@@ -26,8 +26,14 @@ TILE_SIZE = 50
 # Player Configuration
 PLAYER_WIDTH = 40
 PLAYER_HEIGHT = 40
-PLAYER_SPEED = 200  # Pixels per second
+PLAYER_SPEED = 200  # Pixels per second (base speed)
+PLAYER_SPRINT_MULTIPLIER = 1.5  # Sprint is 50% faster
+PLAYER_DASH_SPEED = 800  # Dash speed in pixels/second
+PLAYER_DASH_DURATION = 0.2  # Dash lasts 0.2 seconds
+PLAYER_DASH_COOLDOWN = 3.0  # Dash cooldown in seconds
 PLAYER_MAX_HEALTH = 100
+PLAYER_MAX_MANA = 100
+PLAYER_MANA_REGEN = 10  # Mana per second
 PLAYER_RESPAWN_TIME = 5  # Seconds
 
 # Match Configuration
@@ -44,6 +50,17 @@ ZONE_DAMAGE_PER_SECOND = 5
 # Skill Configuration
 MAX_SKILLS = 4
 SKILL_COOLDOWN_DEFAULT = 5.0  # Seconds
+
+# Skill Types Configuration
+SKILLSHOT_SPEED = 600  # Projectile speed
+SKILLSHOT_MAX_RANGE = 800  # Max distance
+AOE_RADIUS_DEFAULT = 150  # Default AOE radius
+RANGEBASED_RADIUS = 200  # Radius around player
+HOMING_SPEED = 300  # Homing projectile speed
+HOMING_TURN_RATE = 180  # Degrees per second
+CHANNELING_MANA_COST = 20  # Per second
+DEFENSIVE_DURATION = 3.0  # Default shield duration
+CROWD_CONTROL_DURATION = 2.0  # Default CC duration
 
 # Colors (RGB)
 COLOR_WHITE = (255, 255, 255)

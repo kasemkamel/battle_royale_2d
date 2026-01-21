@@ -10,7 +10,7 @@ from typing import Dict, Optional
 from server.models.match import Match
 from shared.constants import TICK_RATE
 from shared.packets import WorldState, Packet
-from shared.enums import PacketType
+from shared.enums import PacketType, PlayerState
 
 
 class MatchManager:
@@ -77,9 +77,19 @@ class MatchManager:
         
         asyncio.create_task(self.server.socket.broadcast(match_end))
         
+        # Return all players to lobby (unready)
+        for player in match.players.values():
+            player.ready = False
+            player.state = PlayerState.LOBBY
+            self.server.lobby_manager.players[player.player_id] = player
+            print(f"[MatchManager] Returned {player.username} to lobby")
+        
         # Clean up
         if self.active_match and self.active_match.match_id == match_id:
             self.active_match = None
+        
+        # Broadcast updated lobby state
+        asyncio.create_task(self._broadcast_lobby_state())
     
     async def _game_loop(self):
         """Main server game loop."""
@@ -163,3 +173,15 @@ class MatchManager:
         # End all active matches
         for match in list(self.matches.values()):
             match.end()
+    
+    async def _broadcast_lobby_state(self):
+        """Broadcast lobby state to all clients."""
+        from shared.packets import LobbyState
+        
+        lobby_data = self.server.lobby_manager.get_lobby_state()
+        lobby_packet = LobbyState(
+            players=lobby_data["players"],
+            match_starting=lobby_data["match_starting"],
+            countdown=lobby_data["countdown"]
+        )
+        await self.server.socket.broadcast(lobby_packet)

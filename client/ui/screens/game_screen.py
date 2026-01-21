@@ -7,7 +7,7 @@ Main gameplay screen with rendering and HUD.
 import pygame
 from client.ui.ui_manager import UIScreen
 from client.models.player import Player
-from shared.constants import SCREEN_WIDTH, SCREEN_HEIGHT, COLOR_BLACK, COLOR_WHITE, COLOR_RED
+from shared.constants import SCREEN_WIDTH, SCREEN_HEIGHT, COLOR_BLACK, COLOR_WHITE, COLOR_RED, COLOR_GREEN, COLOR_YELLOW
 
 
 class GameScreen(UIScreen):
@@ -28,9 +28,14 @@ class GameScreen(UIScreen):
         self.zone_center_x = 0
         self.zone_center_y = 0
         self.zone_radius = 0
+        self.zone_shrinking = False
         
         # Input state
         self.keys_pressed = set()
+        self.mouse_world_x = 0  # Mouse position in world coordinates
+        self.mouse_world_y = 0
+        self.mouse_screen_x = 0  # Mouse position in screen coordinates
+        self.mouse_screen_y = 0
     
     def on_enter(self):
         """Called when entering game screen."""
@@ -71,6 +76,7 @@ class GameScreen(UIScreen):
         self.zone_center_x = zone_data.get("center_x", 0)
         self.zone_center_y = zone_data.get("center_y", 0)
         self.zone_radius = zone_data.get("radius", 0)
+        self.zone_shrinking = zone_data.get("shrinking", False)
     
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""
@@ -78,9 +84,21 @@ class GameScreen(UIScreen):
             self.keys_pressed.add(event.key)
         elif event.type == pygame.KEYUP:
             self.keys_pressed.discard(event.key)
+        elif event.type == pygame.MOUSEMOTION:
+            # Track mouse position
+            self.mouse_screen_x, self.mouse_screen_y = event.pos
+            # Convert to world coordinates
+            self.mouse_world_x = self.mouse_screen_x + self.camera_x
+            self.mouse_world_y = self.mouse_screen_y + self.camera_y
     
     def update(self, delta_time: float):
         """Update game logic."""
+        # Get current mouse position (in case no motion event)
+        mouse_pos = pygame.mouse.get_pos()
+        self.mouse_screen_x, self.mouse_screen_y = mouse_pos
+        self.mouse_world_x = self.mouse_screen_x + self.camera_x
+        self.mouse_world_y = self.mouse_screen_y + self.camera_y
+        
         # Calculate movement input
         move_x = 0
         move_y = 0
@@ -99,9 +117,25 @@ class GameScreen(UIScreen):
             move_x *= 0.707  # 1/sqrt(2)
             move_y *= 0.707
         
-        # Send input to server
-        if move_x != 0 or move_y != 0:
-            self.manager.game.network.send_player_input(move_x, move_y)
+        # Check for sprint (Shift key)
+        is_sprinting = pygame.K_LSHIFT in self.keys_pressed or pygame.K_RSHIFT in self.keys_pressed
+        
+        # Check for dash (Spacebar)
+        is_dashing = pygame.K_SPACE in self.keys_pressed
+        
+        # Build actions dict
+        actions = {
+            "sprint": is_sprinting,
+            "dash": is_dashing
+        }
+        
+        # Send input to server (include mouse position)
+        #if move_x != 0 or move_y != 0 or is_sprinting or is_dashing:
+        self.manager.game.network.send_player_input(
+                move_x, move_y, 
+                self.mouse_world_x, self.mouse_world_y,
+                actions
+            )
         
         # Update camera to follow local player
         if self.local_player_id and self.local_player_id in self.players:
@@ -119,6 +153,9 @@ class GameScreen(UIScreen):
         # Draw all players
         for player in self.players.values():
             player.render(screen, self.camera_x, self.camera_y)
+        
+        # Draw crosshair at mouse position
+        self._draw_crosshair(screen)
         
         # Draw HUD
         self._draw_hud(screen)
@@ -144,6 +181,19 @@ class GameScreen(UIScreen):
         except:
             pass  # Ignore if circle is off-screen
     
+    def _draw_crosshair(self, screen: pygame.Surface):
+        """Draw crosshair at mouse position."""
+        x, y = self.mouse_screen_x, self.mouse_screen_y
+        size = 10
+        thickness = 2
+        
+        # Draw cross
+        pygame.draw.line(screen, COLOR_WHITE, (x - size, y), (x + size, y), thickness)
+        pygame.draw.line(screen, COLOR_WHITE, (x, y - size), (x, y + size), thickness)
+        
+        # Draw circle
+        pygame.draw.circle(screen, COLOR_WHITE, (x, y), size, 1)
+    
     def _draw_hud(self, screen: pygame.Surface):
         """Draw heads-up display."""
         font = pygame.font.Font(None, 28)
@@ -160,9 +210,32 @@ class GameScreen(UIScreen):
             health_text = f"Health: {int(local_player.health)}/{int(local_player.max_health)}"
             health_surface = font.render(health_text, True, (0, 255, 0))
             screen.blit(health_surface, (10, 40))
+            
+            # Mana
+            mana_text = f"Mana: {int(local_player.mana)}/{int(local_player.max_mana)}"
+            mana_surface = font.render(mana_text, True, (0, 200, 255))
+            screen.blit(mana_surface, (10, 70))
+            
+            # Sprint indicator
+            if local_player.is_sprinting:
+                sprint_text = "SPRINTING"
+                sprint_surface = font.render(sprint_text, True, COLOR_YELLOW)
+                screen.blit(sprint_surface, (10, 100))
+        
+        # Zone status
+        if self.zone_shrinking:
+            zone_text = "⚠ ZONE SHRINKING ⚠"
+            zone_surface = font.render(zone_text, True, (255, 100, 100))
+            zone_rect = zone_surface.get_rect(center=(SCREEN_WIDTH // 2, 20))
+            screen.blit(zone_surface, zone_rect)
+        else:
+            zone_text = "Safe Zone Active"
+            zone_surface = font.render(zone_text, True, (100, 255, 100))
+            zone_rect = zone_surface.get_rect(center=(SCREEN_WIDTH // 2, 20))
+            screen.blit(zone_surface, zone_rect)
         
         # Instructions
         instruction_font = pygame.font.Font(None, 20)
-        instructions = "WASD: Move | ESC: Menu"
+        instructions = "WASD: Move | Shift: Sprint | Space: Dash | ESC: Menu"
         instruction_surface = instruction_font.render(instructions, True, (150, 150, 150))
         screen.blit(instruction_surface, (10, SCREEN_HEIGHT - 30))

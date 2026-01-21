@@ -158,10 +158,11 @@ class NetworkClient:
         from shared.packets import RegisterRequest
         self.send(RegisterRequest(username, password, email))
     
-    def send_player_input(self, move_x: float, move_y: float, actions: dict = None):
+    def send_player_input(self, move_x: float, move_y: float, mouse_x: float = 0, 
+                          mouse_y: float = 0, actions: dict = None):
         """Send player input."""
         from shared.packets import PlayerInput
-        self.send(PlayerInput(move_x, move_y, actions))
+        self.send(PlayerInput(move_x, move_y, mouse_x, mouse_y, actions))
     
     def send_join_lobby(self):
         """Send join lobby request."""

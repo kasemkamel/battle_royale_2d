@@ -120,6 +120,8 @@ class ServerPacketHandler:
         # Forward to match manager
         move_x = packet.data.get("move_x", 0)
         move_y = packet.data.get("move_y", 0)
+        mouse_x = packet.data.get("mouse_x", 0)
+        mouse_y = packet.data.get("mouse_y", 0)
         actions = packet.data.get("actions", {})
         
         # Update player input in active match
@@ -127,7 +129,7 @@ class ServerPacketHandler:
             match = self.server.match_manager.active_match
             player = match.players.get(client.player_id)
             if player:
-                player.set_input(move_x, move_y, actions)
+                player.set_input(move_x, move_y, mouse_x, mouse_y, actions)
     
     async def _handle_chat(self, client: ClientConnection, packet: Packet):
         """Handle chat message."""

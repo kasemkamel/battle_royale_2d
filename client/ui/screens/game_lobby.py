@@ -44,7 +44,10 @@ class GameLobbyScreen(UIScreen):
     def on_enter(self):
         """Called when entering lobby screen."""
         super().on_enter()
+        
+        # Reset ready state and button text
         self.is_ready = False
+        self.ready_button.text = "Ready"
         
         # Join lobby only if we don't have a player_id yet
         if self.manager.game.game_state.user_id and not self.manager.game.game_state.player_id:
@@ -80,6 +83,17 @@ class GameLobbyScreen(UIScreen):
         self.lobby_players = data.get("players", [])
         self.match_starting = data.get("match_starting", False)
         self.countdown = data.get("countdown", 0)
+        
+        # Sync our ready state with server
+        our_player_id = self.manager.game.game_state.player_id
+        if our_player_id:
+            for player in self.lobby_players:
+                if player.get("player_id") == our_player_id:
+                    server_ready = player.get("ready", False)
+                    if server_ready != self.is_ready:
+                        self.is_ready = server_ready
+                        self.ready_button.text = "Not Ready" if self.is_ready else "Ready"
+                    break
     
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""

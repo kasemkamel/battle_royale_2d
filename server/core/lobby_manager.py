@@ -111,7 +111,7 @@ class LobbyManager:
         for player in list(self.players.values()):
             match.add_player(player)
         
-        # Clear lobby
+        # Clear lobby (players are now in match, will return after match ends)
         self.players.clear()
         self.match_starting = False
         self.countdown_start = None

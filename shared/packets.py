@@ -81,10 +81,13 @@ class RegisterResponse(Packet):
 class PlayerInput(Packet):
     """Player input from client to server."""
     
-    def __init__(self, move_x: float, move_y: float, actions: Dict[str, bool] = None):
+    def __init__(self, move_x: float, move_y: float, mouse_x: float = 0, 
+                 mouse_y: float = 0, actions: Dict[str, bool] = None):
         super().__init__(PacketType.PLAYER_INPUT, {
             "move_x": move_x,
             "move_y": move_y,
+            "mouse_x": mouse_x,
+            "mouse_y": mouse_y,
             "actions": actions or {}
         })
 

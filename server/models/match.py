@@ -6,6 +6,7 @@ Represents a game match instance with players and game state.
 
 import time
 import random
+import math
 from typing import Dict, List
 from shared.enums import MatchState, PlayerState
 from shared.constants import (
@@ -34,6 +35,10 @@ class Match:
         self.zone_radius = ZONE_INITIAL_RADIUS
         self.zone_target_radius = ZONE_INITIAL_RADIUS
         
+        # Zone shrinking delay (don't shrink immediately)
+        self.zone_shrink_delay = 10.0  # Wait 10 seconds before shrinking
+        self.zone_shrink_start_time = None
+        
         # Stats
         self.tick_count = 0
     
@@ -57,11 +62,21 @@ class Match:
         
         self.state = MatchState.ACTIVE
         self.start_time = time.time()
+        self.zone_shrink_start_time = time.time() + self.zone_shrink_delay
         
-        # Spawn all players at random positions
+        # Spawn all players at random positions INSIDE the initial safe zone
+        # To ensure they're inside, spawn within a circle smaller than zone radius
+        spawn_radius = self.zone_radius * 0.8  # 80% of zone radius for safety margin
+        
         for player in self.players.values():
-            spawn_x = random.uniform(100, WORLD_WIDTH - 100)
-            spawn_y = random.uniform(100, WORLD_HEIGHT - 100)
+            # Generate random angle and distance
+            angle = random.uniform(0, 2 * math.pi)
+            distance = random.uniform(0, spawn_radius)
+            
+            # Convert polar to cartesian coordinates
+            spawn_x = self.zone_center_x + distance * math.cos(angle)
+            spawn_y = self.zone_center_y + distance * math.sin(angle)
+            
             player.respawn(spawn_x, spawn_y)
             player.state = PlayerState.IN_GAME
         
@@ -78,8 +93,9 @@ class Match:
         for player in self.players.values():
             player.update(delta_time)
         
-        # Update zone (shrink over time)
-        if self.zone_radius > 100:  # Minimum zone size
+        # Update zone (shrink over time) - only after delay
+        current_time = time.time()
+        if current_time >= self.zone_shrink_start_time and self.zone_radius > 100:
             self.zone_radius -= ZONE_SHRINK_RATE * delta_time
         
         # Apply zone damage to players outside
@@ -103,9 +119,9 @@ class Match:
             dy = player.y - self.zone_center_y
             distance = (dx**2 + dy**2)**0.5
             
-            # Apply damage if outside zone
+            # Apply damage if outside zone (reduced to 0.2 per tick = 6 damage/second at 30 TPS)
             if distance > self.zone_radius:
-                player.take_damage(5)  # 5 damage per tick when outside
+                player.take_damage(0.2)
     
     def _check_win_condition(self):
         """Check if match should end (only one player alive)."""
@@ -142,7 +158,8 @@ class Match:
             "zone": {
                 "center_x": self.zone_center_x,
                 "center_y": self.zone_center_y,
-                "radius": self.zone_radius
+                "radius": self.zone_radius,
+                "shrinking": time.time() >= self.zone_shrink_start_time if self.zone_shrink_start_time else False
             },
             "time_remaining": self.get_time_remaining()
         }

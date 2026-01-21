@@ -148,8 +148,17 @@ class Game:
     
     def _handle_match_end(self, packet):
         """Handle match end."""
-        print("[Game] Match ended!")
-        # Could show end screen, but for now go back to lobby
+        winner = packet.data.get("winner")
+        if winner:
+            print(f"[Game] Match ended! Winner: {winner.get('username')}")
+        else:
+            print("[Game] Match ended! No winner.")
+        
+        # Reset ready state
+        self.lobby_screen.is_ready = False
+        self.lobby_screen.ready_button.text = "Ready"
+        
+        # Return to lobby
         self.ui_manager.switch_to("lobby")
     
     def run(self):
