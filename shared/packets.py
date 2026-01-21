@@ -10,7 +10,7 @@ from shared.enums import PacketType
 
 
 class Packet:
-    """Base packet class for network communication."""
+    """Base packet class for network communication.""" 
     
     def __init__(self, packet_type: PacketType, data: Dict[str, Any] = None):
         self.type = packet_type

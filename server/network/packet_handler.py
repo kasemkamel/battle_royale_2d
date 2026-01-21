@@ -28,6 +28,7 @@ class ServerPacketHandler:
             PacketType.LEAVE_LOBBY: self._handle_leave_lobby,
             PacketType.PLAYER_READY: self._handle_player_ready,
             PacketType.PLAYER_INPUT: self._handle_player_input,
+            PacketType.USE_SKILL: self._handle_use_skill,
             PacketType.CHAT_MESSAGE: self._handle_chat,
             PacketType.PING: self._handle_ping,
             PacketType.GET_ALL_SKILLS: self._handle_get_all_skills,
@@ -134,6 +135,132 @@ class ServerPacketHandler:
             player = match.players.get(client.player_id)
             if player:
                 player.set_input(move_x, move_y, mouse_x, mouse_y, actions)
+    
+    async def _handle_use_skill(self, client: ClientConnection, packet: Packet):
+        """Handle skill casting."""
+        if not client.player_id or not client.user_id:
+            return
+        
+        skill_index = packet.data.get("skill_index")
+        mouse_x = packet.data.get("mouse_world_x", 0)
+        mouse_y = packet.data.get("mouse_world_y", 0)
+        
+        # Get player from active match
+        if not self.server.match_manager.active_match:
+            return
+        
+        match = self.server.match_manager.active_match
+        player = match.players.get(client.player_id)
+        
+        if not player:
+            return
+        
+        # Get user's skill loadout
+        user = self.server.authenticator.get_session(client.user_id)
+        if not user or skill_index >= len(user.skill_loadout):
+            return
+        
+        skill_id = user.skill_loadout[skill_index]
+        
+        # Get skill from database
+        skill = self.server.skill_database.get_skill(skill_id)
+        if not skill:
+            return
+        
+        # Check if can cast (mana, cooldown)
+        can_cast, reason = skill.can_cast(player.mana)
+        if not can_cast:
+            print(f"[Server] {player.username} cannot cast {skill.name}: {reason}")
+            return
+        
+        # Consume mana
+        player.mana -= skill.mana_cost
+        
+        # Cast the skill
+        player_pos = (player.x, player.y)
+        target_pos = (mouse_x, mouse_y)
+        effect_data = skill.cast(player_pos, target_pos)
+        
+        print(f"[Server] {player.username} cast {skill.name} (mana: {player.mana:.1f})")
+        
+        # Apply skill effects immediately (simplified for now)
+        self._apply_skill_effects(match, player, skill, effect_data)
+    
+    def _apply_skill_effects(self, match, caster, skill, effect_data):
+        """Apply skill effects to targets."""
+        category = skill.category.name
+        
+        if category == "SKILLSHOT":
+            # TODO: Create projectile entity
+            pass
+        
+        elif category == "AOE":
+            # Damage all players in radius
+            center_x = effect_data["center_x"]
+            center_y = effect_data["center_y"]
+            radius = effect_data["radius"]
+            damage = effect_data["damage"]
+            
+            for player in match.players.values():
+                if player.player_id == caster.player_id:
+                    continue  # Don't damage self
+                
+                dx = player.x - center_x
+                dy = player.y - center_y
+                distance = (dx**2 + dy**2)**0.5
+                
+                if distance <= radius:
+                    player.take_damage(damage, caster.player_id)
+                    print(f"[Skill] AOE hit {player.username} for {damage} damage")
+        
+        elif category == "RANGEBASED":
+            # Damage all players in radius around caster
+            radius = effect_data["radius"]
+            damage = effect_data["damage"]
+            
+            for player in match.players.values():
+                if player.player_id == caster.player_id:
+                    continue
+                
+                dx = player.x - caster.x
+                dy = player.y - caster.y
+                distance = (dx**2 + dy**2)**0.5
+                
+                if distance <= radius:
+                    player.take_damage(damage, caster.player_id)
+                    print(f"[Skill] Range hit {player.username} for {damage} damage")
+        
+        elif category == "HOMING":
+            # TODO: Create homing projectile
+            pass
+        
+        elif category == "CHANNELING":
+            # TODO: Handle channeling state
+            pass
+        
+        elif category == "DEFENSIVE":
+            # TODO: Apply shield buff
+            pass
+        
+        elif category == "CROWD_CONTROL":
+            # Apply CC to all in radius
+            center_x = effect_data["center_x"]
+            center_y = effect_data["center_y"]
+            radius = effect_data["radius"]
+            cc_type = effect_data["cc_type"]
+            duration = effect_data["duration"]
+            
+            for player in match.players.values():
+                if player.player_id == caster.player_id:
+                    continue
+                
+                dx = player.x - center_x
+                dy = player.y - center_y
+                distance = (dx**2 + dy**2)**0.5
+                
+                if distance <= radius:
+                    player.apply_crowd_control(cc_type, duration)
+                    print(f"[Skill] Applied {cc_type} to {player.username}")
     
     async def _handle_chat(self, client: ClientConnection, packet: Packet):
         """Handle chat message."""

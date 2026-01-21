@@ -4,10 +4,12 @@ Game Screen
 Main gameplay screen with rendering and HUD.
 """
 
+import math
+import time
 import pygame
 from client.ui.ui_manager import UIScreen
 from client.models.player import Player
-from shared.constants import SCREEN_WIDTH, SCREEN_HEIGHT, COLOR_BLACK, COLOR_WHITE, COLOR_RED, COLOR_GREEN, COLOR_YELLOW
+from shared.constants import COLOR_YELLOW, SCREEN_WIDTH, SCREEN_HEIGHT, COLOR_BLACK, COLOR_WHITE, COLOR_RED
 
 
 class GameScreen(UIScreen):
@@ -36,10 +38,21 @@ class GameScreen(UIScreen):
         self.mouse_world_y = 0
         self.mouse_screen_x = 0  # Mouse position in screen coordinates
         self.mouse_screen_y = 0
+        
+        # Skill system
+        self.equipped_skills = []  # Player's equipped skills
+        self.active_skill_index = None  # Which skill is being aimed (0-3)
+        self.skill_cooldowns = [0, 0, 0, 0]  # Remaining cooldown for each skill
     
     def on_enter(self):
         """Called when entering game screen."""
         super().on_enter()
+        # Hide mouse cursor during gameplay
+        pygame.mouse.set_visible(False)
+        
+        # Load player's equipped skills
+        self._load_equipped_skills()
+        
         print("[GameScreen] Entered game screen")
     
     def update_world_state(self, data: dict):
@@ -82,17 +95,38 @@ class GameScreen(UIScreen):
         """Handle events."""
         if event.type == pygame.KEYDOWN:
             self.keys_pressed.add(event.key)
+            
+            # Check for skill casts (release of Q/E/R/F)
+            # Skills are cast on key release, not press (allows aiming)
+            
         elif event.type == pygame.KEYUP:
+            # Cast skill on key release
+            if event.key == pygame.K_q:
+                self._cast_skill(0)
+            elif event.key == pygame.K_e:
+                self._cast_skill(1)
+            elif event.key == pygame.K_r:
+                self._cast_skill(2)
+            elif event.key == pygame.K_f:
+                self._cast_skill(3)
+            
             self.keys_pressed.discard(event.key)
+            
         elif event.type == pygame.MOUSEMOTION:
             # Track mouse position
             self.mouse_screen_x, self.mouse_screen_y = event.pos
             # Convert to world coordinates
             self.mouse_world_x = self.mouse_screen_x + self.camera_x
             self.mouse_world_y = self.mouse_screen_y + self.camera_y
-    
+
+
     def update(self, delta_time: float):
         """Update game logic."""
+        # Update skill cooldowns
+        for i in range(len(self.skill_cooldowns)):
+            if self.skill_cooldowns[i] > 0:
+                self.skill_cooldowns[i] = max(0, self.skill_cooldowns[i] - delta_time)
+        
         # Get current mouse position (in case no motion event)
         mouse_pos = pygame.mouse.get_pos()
         self.mouse_screen_x, self.mouse_screen_y = mouse_pos
@@ -130,7 +164,7 @@ class GameScreen(UIScreen):
         }
         
         # Send input to server (include mouse position)
-        #if move_x != 0 or move_y != 0 or is_sprinting or is_dashing:
+        # if move_x != 0 or move_y != 0 or is_sprinting or is_dashing:
         self.manager.game.network.send_player_input(
                 move_x, move_y, 
                 self.mouse_world_x, self.mouse_world_y,
@@ -154,8 +188,8 @@ class GameScreen(UIScreen):
         for player in self.players.values():
             player.render(screen, self.camera_x, self.camera_y)
         
-        # Draw crosshair at mouse position
-        self._draw_crosshair(screen)
+        # Draw skill indicators (on top of players)
+        self._draw_skill_indicators(screen)
         
         # Draw HUD
         self._draw_hud(screen)
@@ -181,18 +215,169 @@ class GameScreen(UIScreen):
         except:
             pass  # Ignore if circle is off-screen
     
-    def _draw_crosshair(self, screen: pygame.Surface):
-        """Draw crosshair at mouse position."""
-        x, y = self.mouse_screen_x, self.mouse_screen_y
-        size = 10
-        thickness = 2
+    def _draw_skill_indicators(self, screen: pygame.Surface):
+        """Draw visual indicators for skills being aimed."""
+        if not self.local_player_id or self.local_player_id not in self.players:
+            return
         
-        # Draw cross
-        pygame.draw.line(screen, COLOR_WHITE, (x - size, y), (x + size, y), thickness)
-        pygame.draw.line(screen, COLOR_WHITE, (x, y - size), (x, y + size), thickness)
+        local_player = self.players[self.local_player_id]
         
-        # Draw circle
-        pygame.draw.circle(screen, COLOR_WHITE, (x, y), size, 1)
+        # Get player screen position
+        player_screen_x = int(local_player.x - self.camera_x)
+        player_screen_y = int(local_player.y - self.camera_y)
+        
+        # Mouse screen position
+        mouse_screen_x = self.mouse_screen_x
+        mouse_screen_y = self.mouse_screen_y
+        
+        # Check which skill is being aimed (Q, E, R, F held)
+        skill_index = None
+        if pygame.K_q in self.keys_pressed:
+            skill_index = 0
+        elif pygame.K_e in self.keys_pressed:
+            skill_index = 1
+        elif pygame.K_r in self.keys_pressed:
+            skill_index = 2
+        elif pygame.K_f in self.keys_pressed:
+            skill_index = 3
+        
+        if skill_index is not None and skill_index < len(self.equipped_skills):
+            skill = self.equipped_skills[skill_index]
+            category = skill.get("category", "")
+            
+            # Different indicators for different skill types
+            if category == "SKILLSHOT":
+                self._draw_skillshot_indicator(screen, player_screen_x, player_screen_y, 
+                                               mouse_screen_x, mouse_screen_y, skill)
+            
+            elif category == "AOE":
+                self._draw_aoe_indicator(screen, mouse_screen_x, mouse_screen_y, skill)
+            
+            elif category == "RANGEBASED":
+                self._draw_rangebased_indicator(screen, player_screen_x, player_screen_y, skill)
+            
+            elif category == "HOMING":
+                self._draw_homing_indicator(screen, player_screen_x, player_screen_y, skill)
+            
+            elif category == "CHANNELING":
+                self._draw_channeling_indicator(screen, player_screen_x, player_screen_y,
+                                                mouse_screen_x, mouse_screen_y, skill)
+            
+            elif category == "DEFENSIVE":
+                self._draw_defensive_indicator(screen, player_screen_x, player_screen_y, skill)
+            
+            elif category == "CROWD_CONTROL":
+                self._draw_cc_indicator(screen, mouse_screen_x, mouse_screen_y, skill)
+    
+    def _draw_skillshot_indicator(self, screen, px, py, mx, my, skill):
+        """Draw line indicator for skillshot."""
+        # Direction line
+        pygame.draw.line(screen, (255, 200, 0, 150), (px, py), (mx, my), 2)
+        
+        # Draw circle at mouse to show projectile size
+        width = skill.get("projectile_width", 20)
+        pygame.draw.circle(screen, (255, 200, 0), (mx, my), int(width / 2), 2)
+    
+    def _draw_aoe_indicator(self, screen, mx, my, skill):
+        """Draw circle indicator for AOE skills."""
+        radius = skill.get("radius", 150)
+        
+        # Outer circle (impact area)
+        pygame.draw.circle(screen, (255, 100, 100), (mx, my), int(radius), 3)
+        
+        # Inner circle (center)
+        pygame.draw.circle(screen, (255, 150, 150), (mx, my), 10, 0)
+    
+    def _draw_rangebased_indicator(self, screen, px, py, skill):
+        """Draw circle around player for range-based skills."""
+        radius = skill.get("radius", 200)
+        
+        # Circle around player
+        pygame.draw.circle(screen, (100, 200, 255), (px, py), int(radius), 3)
+        
+        # Pulsing effect (optional)
+        pulse_radius = int(radius * 0.8)
+        pygame.draw.circle(screen, (100, 200, 255, 100), (px, py), pulse_radius, 1)
+    
+    def _draw_homing_indicator(self, screen, px, py, skill):
+        """Draw indicator for homing skills."""
+        max_range = 400  # Homing range
+        
+        # Circle showing activation range
+        pygame.draw.circle(screen, (200, 100, 255), (px, py), int(max_range), 2)
+        
+        # Draw arrow at player
+        for angle in range(0, 360, 45):
+            rad = math.radians(angle)
+            x = px + math.cos(rad) * 15
+            y = py + math.sin(rad) * 15
+            pygame.draw.circle(screen, (200, 100, 255), (int(x), int(y)), 3, 0)
+    
+    def _draw_channeling_indicator(self, screen, px, py, mx, my, skill):
+        """Draw beam indicator for channeling skills."""
+        max_range = skill.get("max_range", 400)
+        beam_width = skill.get("beam_width", 20)
+        
+        # Calculate direction
+        dx = mx - px
+        dy = my - py
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        if distance > 0:
+            dx /= distance
+            dy /= distance
+        
+        # Clamp to max range
+        actual_range = min(distance, max_range)
+        end_x = px + dx * actual_range
+        end_y = py + dy * actual_range
+        
+        # Draw beam outline
+        pygame.draw.line(screen, (255, 255, 100), (px, py), (int(end_x), int(end_y)), int(beam_width))
+        pygame.draw.line(screen, (255, 255, 0), (px, py), (int(end_x), int(end_y)), int(beam_width / 2))
+    
+    def _draw_defensive_indicator(self, screen, px, py, skill):
+        """Draw shield indicator for defensive skills."""
+        # Shield circle around player
+        pygame.draw.circle(screen, (0, 255, 200), (px, py), 30, 3)
+        pygame.draw.circle(screen, (0, 200, 255), (px, py), 35, 1)
+    
+    def _draw_cc_indicator(self, screen, mx, my, skill):
+        """Draw indicator for crowd control skills."""
+        radius = skill.get("radius", 120)
+        
+        # Purple circle for CC
+        pygame.draw.circle(screen, (200, 100, 200), (mx, my), int(radius), 3)
+        
+        # X pattern inside
+        size = 15
+        pygame.draw.line(screen, (200, 100, 200), 
+                        (mx - size, my - size), (mx + size, my + size), 2)
+        pygame.draw.line(screen, (200, 100, 200), 
+                        (mx - size, my + size), (mx + size, my - size), 2)
+    
+    def _load_equipped_skills(self):
+        """Load player's equipped skills for display."""
+        # Request skills from server or use cached data
+        from shared.packets import Packet
+        from shared.enums import PacketType
+        
+        # For now, request all skills to get full data
+        self.manager.game.network.send(Packet(PacketType.GET_ALL_SKILLS))
+    
+    def receive_skills_data(self, all_skills_data: list):
+        """Called when skill data is received."""
+        # Get player's loadout
+        loadout = self.manager.game.game_state.user_data.get("skill_loadout", [])
+        
+        # Match loadout IDs to full skill data
+        self.equipped_skills = []
+        for skill_id in loadout:
+            skill_data = next((s for s in all_skills_data if s["skill_id"] == skill_id), None)
+            if skill_data:
+                self.equipped_skills.append(skill_data)
+        
+        print(f"[GameScreen] Loaded {len(self.equipped_skills)} equipped skills")
     
     def _draw_hud(self, screen: pygame.Surface):
         """Draw heads-up display."""
@@ -236,6 +421,91 @@ class GameScreen(UIScreen):
         
         # Instructions
         instruction_font = pygame.font.Font(None, 20)
-        instructions = "WASD: Move | Shift: Sprint | Space: Dash | ESC: Menu"
+        instructions = "WASD: Move | Shift: Sprint | Space: Dash | Q/E/R/F: Skills | ESC: Menu"
         instruction_surface = instruction_font.render(instructions, True, (150, 150, 150))
         screen.blit(instruction_surface, (10, SCREEN_HEIGHT - 30))
+        
+        # Skill bar (bottom center)
+        self._draw_skill_bar(screen)
+
+    def on_exit(self):
+            """Called when leaving game screen."""
+            super().on_exit()
+            # Show mouse cursor when leaving game
+            pygame.mouse.set_visible(True)
+    
+    def _draw_skill_bar(self, screen: pygame.Surface):
+        """Draw skill bar showing equipped skills."""
+        if not self.equipped_skills:
+            return
+        
+        bar_width = 400
+        bar_height = 80
+        bar_x = (SCREEN_WIDTH - bar_width) // 2
+        bar_y = SCREEN_HEIGHT - bar_height - 10
+        
+        # Background
+        bg_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+        pygame.draw.rect(screen, (30, 30, 40, 200), bg_rect, border_radius=5)
+        pygame.draw.rect(screen, (100, 100, 100), bg_rect, width=2, border_radius=5)
+        
+        # Skill slots
+        slot_size = 70
+        slot_spacing = 10
+        keys = ["Q", "E", "R", "F"]
+        
+        for i in range(4):
+            x = bar_x + 15 + i * (slot_size + slot_spacing)
+            y = bar_y + 5
+            
+            # Slot background
+            slot_rect = pygame.Rect(x, y, slot_size, slot_size)
+            
+            if i < len(self.equipped_skills):
+                skill = self.equipped_skills[i]
+                cooldown = self.skill_cooldowns[i]
+                
+                # Determine slot color based on cooldown
+                if cooldown > 0:
+                    slot_color = (60, 60, 80)  # On cooldown
+                else:
+                    slot_color = (80, 120, 160)  # Ready
+                
+                pygame.draw.rect(screen, slot_color, slot_rect, border_radius=3)
+                pygame.draw.rect(screen, (150, 150, 150), slot_rect, width=2, border_radius=3)
+                
+                # Skill name
+                name_font = pygame.font.Font(None, 18)
+                name_surface = name_font.render(skill["name"][:8], True, (255, 255, 255))
+                name_rect = name_surface.get_rect(center=(x + slot_size // 2, y + 15))
+                screen.blit(name_surface, name_rect)
+                
+                # Mana cost
+                mana_font = pygame.font.Font(None, 16)
+                mana_text = f"{int(skill['mana_cost'])}M"
+                mana_surface = mana_font.render(mana_text, True, (100, 200, 255))
+                screen.blit(mana_surface, (x + 5, y + slot_size - 20))
+                
+                # Cooldown overlay
+                if cooldown > 0:
+                    # Dark overlay
+                    overlay = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
+                    overlay.fill((0, 0, 0, 150))
+                    screen.blit(overlay, (x, y))
+                    
+                    # Cooldown text
+                    cd_font = pygame.font.Font(None, 28)
+                    cd_text = f"{cooldown:.1f}"
+                    cd_surface = cd_font.render(cd_text, True, (255, 100, 100))
+                    cd_rect = cd_surface.get_rect(center=(x + slot_size // 2, y + slot_size // 2))
+                    screen.blit(cd_surface, cd_rect)
+            else:
+                # Empty slot
+                pygame.draw.rect(screen, (40, 40, 50), slot_rect, border_radius=3)
+                pygame.draw.rect(screen, (80, 80, 80), slot_rect, width=2, border_radius=3)
+            
+            # Key binding
+            key_font = pygame.font.Font(None, 24)
+            key_surface = key_font.render(keys[i], True, (255, 215, 0))
+            key_rect = key_surface.get_rect(bottomright=(x + slot_size - 5, y + slot_size - 5))
+            screen.blit(key_surface, key_rect)

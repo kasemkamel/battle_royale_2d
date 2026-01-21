@@ -176,7 +176,14 @@ class Game:
     def _handle_all_skills(self, packet):
         """Handle all skills response."""
         skills = packet.data.get("skills", [])
-        self.skill_select_screen.receive_all_skills(skills)
+        
+        # Send to skill select screen if it's the current screen
+        if self.ui_manager.current_screen_name == "skills":
+            self.skill_select_screen.receive_all_skills(skills)
+        
+        # Also send to game screen if in game
+        elif self.ui_manager.current_screen_name == "game":
+            self.game_screen.receive_skills_data(skills)
     
     def _handle_skill_loadout_response(self, packet):
         """Handle skill loadout save response."""

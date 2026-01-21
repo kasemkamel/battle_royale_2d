@@ -81,24 +81,8 @@ class Player:
         self._draw_username(screen, screen_x, screen_y)
     
     def _draw_rotated_player(self, screen: pygame.Surface, x: int, y: int):
-        """Draw player as triangle pointing in rotation direction."""
-        # Create triangle points (pointing right by default)
-        points = [
-            (self.width // 2, 0),      # Front tip
-            (-self.width // 2, -self.height // 3),  # Back top
-            (-self.width // 2, self.height // 3)    # Back bottom
-        ]
-        
-        # Rotate points
-        rotated_points = []
-        cos_r = math.cos(self.rotation)
-        sin_r = math.sin(self.rotation)
-        
-        for px, py in points:
-            # Rotate
-            rx = px * cos_r - py * sin_r
-            ry = px * sin_r + py * cos_r
-            rotated_points.append((x + rx, y + ry))
+        """Draw player as circle with direction line."""
+        radius = self.width // 2
         
         # Choose color based on state
         if self.is_dashing:
@@ -108,9 +92,15 @@ class Player:
         else:
             color = self.color
         
-        # Draw triangle
-        pygame.draw.polygon(screen, color, rotated_points)
-        pygame.draw.polygon(screen, COLOR_WHITE, rotated_points, 2)  # Outline
+        # Draw circle body
+        pygame.draw.circle(screen, color, (x, y), radius)
+        pygame.draw.circle(screen, COLOR_WHITE, (x, y), radius, 2)  # Outline
+        
+        # Draw direction line from center to edge
+        line_length = radius
+        end_x = x + math.cos(self.rotation) * line_length
+        end_y = y + math.sin(self.rotation) * line_length
+        pygame.draw.line(screen, COLOR_WHITE, (x, y), (end_x, end_y), 3)
     
     def _draw_dash_trail(self, screen: pygame.Surface, x: int, y: int):
         """Draw dash effect."""
@@ -155,8 +145,8 @@ class Player:
             mana_ratio = self.mana / self.max_mana
             mana_width = int(bar_width * mana_ratio)
             mana_rect = pygame.Rect(x - bar_width // 2, bar_y, mana_width, bar_height)
-            pygame.draw.rect(screen, (0, 200, 255), mana_rect)    
-    
+            pygame.draw.rect(screen, (0, 200, 255), mana_rect)
+
     def _draw_username(self, screen: pygame.Surface, x: int, y: int):
         """Draw username below player."""
         font = pygame.font.Font(None, 20)

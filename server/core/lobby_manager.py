@@ -109,6 +109,17 @@ class LobbyManager:
         match = self.server.match_manager.create_match()
         
         for player in list(self.players.values()):
+            # Load player's skills from their user account
+            user = self.server.authenticator.get_session(player.user_id)
+            if user:
+                # Load skills into player
+                for skill_id in user.skill_loadout:
+                    skill = self.server.skill_database.get_skill(skill_id)
+                    if skill:
+                        player.skills.append(skill)
+                
+                print(f"[Lobby] Loaded {len(player.skills)} skills for {player.username}")
+            
             match.add_player(player)
         
         # Clear lobby (players are now in match, will return after match ends)
