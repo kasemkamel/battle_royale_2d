@@ -35,7 +35,7 @@ PLAYER_DASH_COOLDOWN = 3.0  # Dash cooldown in seconds
 PLAYER_DASH_MANA_COST = 15  # Mana cost per dash
 PLAYER_MAX_HEALTH = 100
 PLAYER_MAX_MANA = 100
-PLAYER_MANA_REGEN = 0  # Mana per second
+PLAYER_MANA_REGEN = 15  # Mana per second
 PLAYER_RESPAWN_TIME = 5  # Seconds
 
 # Match Configuration

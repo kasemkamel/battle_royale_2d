@@ -56,11 +56,21 @@ class Player:
         self.skills = []  # List of equipped skills
         self.active_effects = []  # Active buffs/debuffs
         
+        # Defense
+        self.defense = 0.0  # Damage reduction percentage
+        self.defense_max_hits = 0  # Max hits before defense breaks
+        self.defense_end_time = 0.0  # Time when defense buff ends
+
+        # continuous damage (e.g., DOT)
+        self.continuous_damage = 0.0
+        self.continuous_damage_end_time = 0.0
+        self.continuous_attacker_id = None
+
         # Crowd Control
         self.is_stunned = False
         self.stun_end_time = 0
         self.movement_speed_multiplier = 1.0  # For slows/buffs
-        
+
         # Input
         self.input_x = 0.0
         self.input_y = 0.0
@@ -105,6 +115,19 @@ class Player:
                 self.vel_y = 0
                 return
         
+        if self.defense > 0:
+            if time.time() >= self.defense_end_time:
+                self.defense = 0
+                self.defense_max_hits = 0
+
+        if self.continuous_damage > 0:
+            if time.time() >= self.continuous_damage_end_time:
+                self.continuous_damage = 0
+                self.continuous_damage_end_time = 0
+                self.continuous_attacker_id = None
+            else:
+                damage = self.continuous_damage * delta_time
+                self.take_damage(damage, self.continuous_attacker_id)
         # Calculate speed with modifiers
         base_speed = PLAYER_SPEED
         
@@ -117,6 +140,9 @@ class Player:
             else:
                 # Not enough mana, disable sprint
                 self.is_sprinting = False
+        
+        for skill in self.skills:
+            skill.get_cooldown_remaining()
         
         base_speed *= self.movement_speed_multiplier  # Apply slows/buffs
         
@@ -142,13 +168,34 @@ class Player:
         
         if dx != 0 or dy != 0:
             self.rotation = math.atan2(dy, dx)
-    
+
+    def continuous_damage_tick(self, damage: float, duration: float, attacker_id: int = None):
+        """Start a continuous damage effect (e.g., DOT)."""
+        if not self.is_alive:
+            return False
+        self.continuous_damage = damage
+        self.continuous_damage_end_time = time.time() + duration
+        self.continuous_attacker_id = attacker_id
+
     def take_damage(self, damage: float, attacker_id: int = None):
         """Apply damage to player."""
         if not self.is_alive:
             return False
         
-        self.health -= damage
+        # Apply defense reduction
+        if self.defense_max_hits > 0 and self.defense > 0:
+            self.defense_max_hits -= 1
+            if self.defense_max_hits == 0:
+                self.defense = 0.0  # Defense breaks
+            reduced_damage = damage - self.defense
+        elif self.defense > 0:
+            reduced_damage = damage * (100 / (100 + self.defense))
+        else:
+            reduced_damage = damage
+        
+        reduced_damage = max(1, int(reduced_damage))
+        self.health = max(0, self.health - int(reduced_damage))
+
         self.last_damage_time = time.time()
         
         if self.health <= 0:
@@ -246,6 +293,13 @@ class Player:
             self.movement_speed_multiplier = 1.0 - intensity  # intensity = 0.5 means 50% slow
             # TODO: Add timer to remove slow
     
+    def apply_defense(self, defense_amount: float, max_hits: int, duration: float):
+        """Apply defense buff."""
+        self.defense = defense_amount
+        self.defense_max_hits = max_hits
+        self.defense_end_time = time.time() + duration
+    
+
     def to_dict(self, include_private: bool = False) -> dict:
         """
         Serialize player to dictionary for network transmission.

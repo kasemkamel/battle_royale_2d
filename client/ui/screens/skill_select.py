@@ -168,7 +168,10 @@ class SkillSelectionScreen(UIScreen):
         """Called when skills are received from server."""
         self.all_skills = skills_data
         self._create_skill_cards()
+        
+        # Load current loadout AFTER skills are loaded
         self._load_current_loadout()
+        
         self.status_message = f"Loaded {len(skills_data)} skills"
         self.status_color = (0, 255, 0)
     
@@ -200,8 +203,16 @@ class SkillSelectionScreen(UIScreen):
     
     def _load_current_loadout(self):
         """Load player's current skill loadout into boxes."""
-        loadout = self.manager.game.game_state.get_state_dict().get("skill_loadout", [])
+        loadout = self.manager.game.game_state.user_data.get("skill_loadout", [])
         
+        print(f"[SkillSelect] Loading loadout: {loadout}")
+        print(f"[SkillSelect] Available skills: {len(self.all_skills)}")
+        
+        # Clear all boxes first
+        for box in self.skill_boxes:
+            box.clear()
+        
+        # Load skills into boxes
         for i, skill_id in enumerate(loadout):
             if i >= 4:
                 break
@@ -210,6 +221,9 @@ class SkillSelectionScreen(UIScreen):
             skill_data = next((s for s in self.all_skills if s["skill_id"] == skill_id), None)
             if skill_data:
                 self.skill_boxes[i].set_skill(skill_data)
+                print(f"[SkillSelect] Loaded {skill_data['name']} into slot {i}")
+            else:
+                print(f"[SkillSelect] Warning: Skill '{skill_id}' not found in database")
     
     def go_back(self):
         """Navigate back to lobby."""
@@ -237,11 +251,12 @@ class SkillSelectionScreen(UIScreen):
         if success:
             self.status_message = "Loadout saved!"
             self.status_color = (0, 255, 0)
-            # Update local game state
-            self.manager.game.game_state.user_data["skill_loadout"] = loadout
+            # Loadout is already updated in game state by game.py
+            print(f"[SkillSelect] Loadout saved successfully: {loadout}")
         else:
             self.status_message = f"Error: {message}"
             self.status_color = (255, 100, 100)
+            print(f"[SkillSelect] Save failed: {message}")
     
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""

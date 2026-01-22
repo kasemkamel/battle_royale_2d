@@ -21,7 +21,7 @@ class MatchManager:
         self.matches: Dict[int, Match] = {}  # match_id -> Match
         self.active_match: Optional[Match] = None
         self.next_match_id = 1
-        
+
         # Game loop
         self.is_running = False
         self.tick_rate = TICK_RATE
@@ -117,6 +117,7 @@ class MatchManager:
                 # No active match, slow down loop
                 await asyncio.sleep(0.1)
                 continue
+
             
             # Sleep to maintain tick rate
             elapsed = time.time() - current_time

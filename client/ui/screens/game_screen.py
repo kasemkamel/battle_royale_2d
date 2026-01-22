@@ -1,15 +1,17 @@
 # client/ui/screens/game_screen.py
+
 """
 Game Screen
 Main gameplay screen with rendering and HUD.
 """
 
 import math
-import time
 import pygame
 from client.ui.ui_manager import UIScreen
 from client.models.player import Player
 from shared.constants import COLOR_YELLOW, SCREEN_WIDTH, SCREEN_HEIGHT, COLOR_BLACK, COLOR_WHITE, COLOR_RED
+from shared.enums import PacketType
+from shared.packets import Packet
 
 
 class GameScreen(UIScreen):
@@ -118,8 +120,7 @@ class GameScreen(UIScreen):
             # Convert to world coordinates
             self.mouse_world_x = self.mouse_screen_x + self.camera_x
             self.mouse_world_y = self.mouse_screen_y + self.camera_y
-
-
+    
     def update(self, delta_time: float):
         """Update game logic."""
         # Update skill cooldowns
@@ -270,13 +271,39 @@ class GameScreen(UIScreen):
                 self._draw_cc_indicator(screen, mouse_screen_x, mouse_screen_y, skill)
     
     def _draw_skillshot_indicator(self, screen, px, py, mx, my, skill):
-        """Draw line indicator for skillshot."""
-        # Direction line
-        pygame.draw.line(screen, (255, 200, 0, 150), (px, py), (mx, my), 2)
-        
-        # Draw circle at mouse to show projectile size
+        """Draw line indicator for skillshot with FIXED range."""
         width = skill.get("projectile_width", 20)
-        pygame.draw.circle(screen, (255, 200, 0), (mx, my), int(width / 2), 2)
+        max_range = skill.get("max_range", 800)
+        
+        # Calculate direction to mouse
+        dx = mx - px
+        dy = my - py
+        length = math.sqrt(dx**2 + dy**2)
+        
+        if length == 0:
+            # No direction, point right by default
+            dx, dy = 1, 0
+        else:
+            # Normalize direction
+            dx /= length
+            dy /= length
+        
+        # Always draw line at FIXED max_range (not variable)
+        end_x = px + dx * max_range
+        end_y = py + dy * max_range
+        
+        # Draw range line (always same length)
+        pygame.draw.line(screen, (255, 200, 0), (px, py), (int(end_x), int(end_y)), 2)
+        
+        # Draw circle at end to show where projectile will reach
+        pygame.draw.circle(screen, (255, 200, 0), (int(end_x), int(end_y)), int(width), 2)
+        
+        # Draw projectile preview at mouse cursor (if within range)
+        if length <= max_range:
+            pygame.draw.circle(screen, (255, 200, 0), (mx, my), int(width / 2), 2)
+        else:
+            # Draw at max range instead
+            pygame.draw.circle(screen, (255, 100, 100), (int(end_x), int(end_y)), int(width / 2), 0)
     
     def _draw_aoe_indicator(self, screen, mx, my, skill):
         """Draw circle indicator for AOE skills."""
@@ -427,12 +454,6 @@ class GameScreen(UIScreen):
         
         # Skill bar (bottom center)
         self._draw_skill_bar(screen)
-
-    def on_exit(self):
-            """Called when leaving game screen."""
-            super().on_exit()
-            # Show mouse cursor when leaving game
-            pygame.mouse.set_visible(True)
     
     def _draw_skill_bar(self, screen: pygame.Surface):
         """Draw skill bar showing equipped skills."""
@@ -509,3 +530,35 @@ class GameScreen(UIScreen):
             key_surface = key_font.render(keys[i], True, (255, 215, 0))
             key_rect = key_surface.get_rect(bottomright=(x + slot_size - 5, y + slot_size - 5))
             screen.blit(key_surface, key_rect)
+    
+    def _cast_skill(self, skill_index: int):
+        """Cast skill at given index."""
+        if skill_index >= len(self.equipped_skills):
+            print(f"[Skill] No skill in slot {skill_index}")
+            return
+        
+        skill = self.equipped_skills[skill_index]
+        
+        # Check cooldown
+        if self.skill_cooldowns[skill_index] > 0:
+            print(f"[Skill] {skill['name']} on cooldown")
+            return
+        
+        # Send to server
+        packet = Packet(PacketType.USE_SKILL, {
+            "skill_index": skill_index,
+            "mouse_world_x": self.mouse_world_x,
+            "mouse_world_y": self.mouse_world_y
+        })
+        self.manager.game.network.send(packet)
+        
+        # Start cooldown
+        self.skill_cooldowns[skill_index] = skill.get("cooldown", 5.0)
+        
+        print(f"[Skill] Cast {skill['name']}")
+
+    def on_exit(self):
+            """Called when leaving game screen."""
+            super().on_exit()
+            # Show mouse cursor when leaving game
+            pygame.mouse.set_visible(True)

@@ -221,7 +221,8 @@ class SkillDatabase:
             skill_id="tough_skin",
             name="Tough Skin",
             stat_bonuses={
-                "max_health": 20,  # +20 max health
+                "max_health_multiplier": 1.2,  # +20% max health
+                "health": 20,
                 "health_regen": 1
             }
         )
@@ -291,7 +292,7 @@ class SkillDatabase:
                 "description": skill.description
             }
             for skill in self.skills.values()
-            if skill.category.name == category
+            if skill.category.name == category 
         ]
     
     def create_skill_instance(self, skill_id: str) -> Optional[any]:

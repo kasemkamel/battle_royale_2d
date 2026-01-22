@@ -110,9 +110,10 @@ class Game:
             self.game_state.login(user_id, username, stats)
             
             # Store skill loadout
-            self.game_state.user_data = {
-                "skill_loadout": skill_loadout
-            }
+            self.game_state.user_data["skill_loadout"] = skill_loadout
+            
+            print(f"[Game] Login successful - Loadout: {skill_loadout}")
+            print(f"[Game] Game state user_data: {self.game_state.user_data}")
             
             self.home_screen.show_status("Login successful!", (0, 255, 0))
             
@@ -190,6 +191,12 @@ class Game:
         success = packet.data.get("success")
         message = packet.data.get("message")
         loadout = packet.data.get("skill_loadout", [])
+        
+        if success:
+            # Update game state with new loadout
+            self.game_state.user_data["skill_loadout"] = loadout
+            print(f"[Game] Skill loadout updated: {loadout}")
+        
         self.skill_select_screen.on_save_response(success, message, loadout)
     
     def run(self):

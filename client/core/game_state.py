@@ -18,7 +18,9 @@ class ClientGameState:
         self.user_id = None
         self.username = None
         self.stats = {}
-        self.user_data = {}  # Additional user data (skill loadout, etc.)
+        self.user_data = {
+            "skill_loadout": []  # Initialize empty loadout
+        }
         
         # Player data
         self.player_id = None
@@ -67,8 +69,14 @@ class ClientGameState:
             "username": self.username,
             "stats": self.stats,
             "player_id": self.player_id,
-            "state": self.state.name
+            "state": self.state.name,
+            "skill_loadout": self.user_data.get("skill_loadout", [])
         }
+    
+    def get(self, key: str, default=None):
+        """Allow dict-style access to game state."""
+        state_dict = self.get_state_dict()
+        return state_dict.get(key, default)
     
     def __repr__(self):
         return f"GameState(user={self.username}, connected={self.is_connected})"

@@ -4,6 +4,7 @@ Server Packet Handler
 Routes incoming packets to appropriate handler methods.
 """
 
+import math
 from shared.enums import PacketType
 from shared.packets import Packet, LoginResponse, RegisterResponse, LobbyState
 from server.network.server_socket import ClientConnection
@@ -155,17 +156,12 @@ class ServerPacketHandler:
         if not player:
             return
         
-        # Get user's skill loadout
-        user = self.server.authenticator.get_session(client.user_id)
-        if not user or skill_index >= len(user.skill_loadout):
+        # Get skill from player's equipped skills (each player has their own instances)
+        if skill_index >= len(player.skills):
+            print(f"[Server] {player.username} tried to use skill {skill_index} but only has {len(player.skills)} skills")
             return
         
-        skill_id = user.skill_loadout[skill_index]
-        
-        # Get skill from database
-        skill = self.server.skill_database.get_skill(skill_id)
-        if not skill:
-            return
+        skill = player.skills[skill_index]
         
         # Check if can cast (mana, cooldown)
         can_cast, reason = skill.can_cast(player.mana)
@@ -181,7 +177,7 @@ class ServerPacketHandler:
         target_pos = (mouse_x, mouse_y)
         effect_data = skill.cast(player_pos, target_pos)
         
-        print(f"[Server] {player.username} cast {skill.name} (mana: {player.mana:.1f})")
+        print(f"[Server] {player.username} cast {skill.name} (mana: {player.mana:.1f}, cooldown: {skill.cooldown}s)")
         
         # Apply skill effects immediately (simplified for now)
         self._apply_skill_effects(match, player, skill, effect_data)
@@ -191,8 +187,71 @@ class ServerPacketHandler:
         category = skill.category.name
         
         if category == "SKILLSHOT":
-            # TODO: Create projectile entity
-            pass
+            # For now, treat as instant raycast (simplified - no projectile entity)
+            # In future, create actual projectile that moves over time
+            start_x = effect_data["start_x"]
+            start_y = effect_data["start_y"]
+            dir_x = effect_data["direction_x"]
+            dir_y = effect_data["direction_y"]
+            max_range = effect_data["max_range"]
+            damage = effect_data["damage"]
+            width = effect_data["width"]
+            
+            # Raycast to find first hit
+            end_x = start_x + dir_x * max_range
+            end_y = start_y + dir_y * max_range
+            
+            # Check line intersection with all players
+            hit_player = None
+            min_distance = float('inf')
+            
+            for player in match.players.values():
+                if player.player_id == caster.player_id:
+                    continue
+                
+                # Calculate distance from player to line
+                # Point to line distance formula
+                dx = end_x - start_x
+                dy = end_y - start_y
+                
+                px = player.x - start_x
+                py = player.y - start_y
+                
+                # Project point onto line
+                line_length_sq = dx * dx + dy * dy
+                if line_length_sq == 0:
+                    continue
+                
+                t = max(0, min(1, (px * dx + py * dy) / line_length_sq))
+                
+                # Closest point on line
+                closest_x = start_x + t * dx
+                closest_y = start_y + t * dy
+                
+                # Distance from player to closest point
+                dist_x = player.x - closest_x
+                dist_y = player.y - closest_y
+                dist = math.sqrt(dist_x * dist_x + dist_y * dist_y)
+                
+                # Check if hit (within projectile width)
+                if dist <= width:
+                    # Calculate distance from start to hit
+                    hit_dist = math.sqrt((closest_x - start_x)**2 + (closest_y - start_y)**2)
+                    
+                    # First hit only (unless piercing)
+                    if hit_dist < min_distance:
+                        min_distance = hit_dist
+                        hit_player = player
+                        
+                        # If not piercing, break after first hit
+                        if not effect_data.get("piercing", False):
+                            break
+            
+            if hit_player:
+                hit_player.take_damage(damage, caster.player_id)
+                print(f"[Skill] Skillshot hit {hit_player.username} for {damage} damage")
+            else:
+                print(f"[Skill] Skillshot missed")
         
         elif category == "AOE":
             # Damage all players in radius
@@ -207,7 +266,7 @@ class ServerPacketHandler:
                 
                 dx = player.x - center_x
                 dy = player.y - center_y
-                distance = (dx**2 + dy**2)**0.5
+                distance = math.sqrt(dx**2 + dy**2)
                 
                 if distance <= radius:
                     player.take_damage(damage, caster.player_id)
@@ -224,23 +283,80 @@ class ServerPacketHandler:
                 
                 dx = player.x - caster.x
                 dy = player.y - caster.y
-                distance = (dx**2 + dy**2)**0.5
+                distance = math.sqrt(dx**2 + dy**2)
                 
                 if distance <= radius:
                     player.take_damage(damage, caster.player_id)
                     print(f"[Skill] Range hit {player.username} for {damage} damage")
         
         elif category == "HOMING":
-            # TODO: Create homing projectile
-            pass
+            # Find nearest enemy and hit them (simplified instant version)
+            # In future, create homing projectile entity
+            nearest_enemy = None
+            min_distance = float('inf')
+            
+            for player in match.players.values():
+                if player.player_id == caster.player_id:
+                    continue
+                
+                dx = player.x - caster.x
+                dy = player.y - caster.y
+                distance = math.sqrt(dx**2 + dy**2)
+                
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_enemy = player
+            
+            if nearest_enemy:
+                damage = effect_data["damage"]
+                nearest_enemy.take_damage(damage, caster.player_id)
+                print(f"[Skill] Homing hit {nearest_enemy.username} for {damage} damage")
+            else:
+                print(f"[Skill] Homing found no target")
         
         elif category == "CHANNELING":
-            # TODO: Handle channeling state
-            pass
+            # Start channeling state (continuous damage)
+            # For now, treat as instant damage in cone
+            # TODO: Implement proper channeling with continuous damage
+            damage = effect_data["damage_per_second"]
+            max_range = effect_data["max_range"]
+            dir_x = effect_data["direction_x"]
+            dir_y = effect_data["direction_y"]
+            
+            # Apply instant damage to first enemy in beam
+            for player in match.players.values():
+                if player.player_id == caster.player_id:
+                    continue
+                
+                # Check if in beam direction
+                to_player_x = player.x - caster.x
+                to_player_y = player.y - caster.y
+                distance = math.sqrt(to_player_x**2 + to_player_y**2)
+                
+                if distance > max_range:
+                    continue
+                
+                # Normalize
+                if distance > 0:
+                    to_player_x /= distance
+                    to_player_y /= distance
+                
+                # Check angle (dot product)
+                dot = to_player_x * dir_x + to_player_y * dir_y
+                
+                if dot > 0.95:  # ~18 degree cone
+                    player.take_damage(damage * 0.5, caster.player_id)  # Half damage per tick
+                    print(f"[Skill] Channeling hit {player.username} for {damage * 0.5} damage")
+                    # break  # Only first hit
+                    # -> Allow multiple hits in cone
         
         elif category == "DEFENSIVE":
-            # TODO: Apply shield buff
-            pass
+            # Apply shield buff to caster
+            shield_amount = effect_data["shield_amount"]
+            shield_max_hits = effect_data["max_hits"]
+            shield_duration = effect_data["duration"]
+            caster.apply_defense(shield_amount, max_hits=shield_max_hits, duration=shield_duration)
+            print(f"[Skill] Applied {shield_amount} shield to {caster.username}")
         
         elif category == "CROWD_CONTROL":
             # Apply CC to all in radius
@@ -256,11 +372,15 @@ class ServerPacketHandler:
                 
                 dx = player.x - center_x
                 dy = player.y - center_y
-                distance = (dx**2 + dy**2)**0.5
+                distance = math.sqrt(dx**2 + dy**2)
                 
                 if distance <= radius:
                     player.apply_crowd_control(cc_type, duration)
                     print(f"[Skill] Applied {cc_type} to {player.username}")
+        
+        elif category == "PASSIVE":
+            # Passives don't have activation effects
+            print(f"[Skill] Passive skills don't have cast effects")
     
     async def _handle_chat(self, client: ClientConnection, packet: Packet):
         """Handle chat message."""

@@ -112,11 +112,18 @@ class LobbyManager:
             # Load player's skills from their user account
             user = self.server.authenticator.get_session(player.user_id)
             if user:
-                # Load skills into player
+                # Load skills into player - CREATE NEW INSTANCES
+                player.skills = []  # Clear any existing skills
+                
                 for skill_id in user.skill_loadout:
-                    skill = self.server.skill_database.get_skill(skill_id)
-                    if skill:
-                        player.skills.append(skill)
+                    # Get base skill from database
+                    base_skill = self.server.skill_database.get_skill(skill_id)
+                    if base_skill:
+                        # Create a NEW instance for this player (deep copy)
+                        # This ensures each player has independent cooldown states
+                        import copy
+                        skill_instance = copy.deepcopy(base_skill)
+                        player.skills.append(skill_instance)
                 
                 print(f"[Lobby] Loaded {len(player.skills)} skills for {player.username}")
             
