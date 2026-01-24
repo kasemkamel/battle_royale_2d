@@ -5,6 +5,7 @@ Routes incoming packets to appropriate handler methods.
 """
 
 import math
+import time
 from shared.enums import PacketType
 from shared.packets import Packet, LoginResponse, RegisterResponse, LobbyState
 from server.network.server_socket import ClientConnection
@@ -18,6 +19,7 @@ class ServerPacketHandler:
         server: The main GameServer instance with auth, lobby, etc.
         """
         self.server = server
+        self.chanelling_clicks_activate = False
     
     async def handle_packet(self, client: ClientConnection, packet: Packet):
         """Route packet to appropriate handler."""
@@ -30,6 +32,7 @@ class ServerPacketHandler:
             PacketType.PLAYER_READY: self._handle_player_ready,
             PacketType.PLAYER_INPUT: self._handle_player_input,
             PacketType.USE_SKILL: self._handle_use_skill,
+            PacketType.STOP_CHANNELING: self._handle_stop_channeling,
             PacketType.CHAT_MESSAGE: self._handle_chat,
             PacketType.PING: self._handle_ping,
             PacketType.GET_ALL_SKILLS: self._handle_get_all_skills,
@@ -169,6 +172,27 @@ class ServerPacketHandler:
             print(f"[Server] {player.username} cannot cast {skill.name}: {reason}")
             return
         
+        from shared.skill_system import SkillCategory
+    
+        if skill.category == SkillCategory.CHANNELING:
+            # Start channeling
+            if not player.is_channeling:
+                # Consume NO mana upfront (drained per second)
+                player.start_channeling(skill_index, mouse_x, mouse_y)
+                
+                # Cast to initialize
+                player_pos = (player.x, player.y)
+                target_pos = (mouse_x, mouse_y)
+                effect_data = skill.cast(player_pos, target_pos)
+                
+                print(f"[Server] {player.username} started channeling {skill.name}")
+            else:
+                # Already channeling, update target position
+                player.channel_target_x = mouse_x
+                player.channel_target_y = mouse_y
+            
+            return
+        
         # Consume mana
         player.mana -= skill.mana_cost
         
@@ -187,71 +211,47 @@ class ServerPacketHandler:
         category = skill.category.name
         
         if category == "SKILLSHOT":
-            # For now, treat as instant raycast (simplified - no projectile entity)
-            # In future, create actual projectile that moves over time
-            start_x = effect_data["start_x"]
-            start_y = effect_data["start_y"]
-            dir_x = effect_data["direction_x"]
-            dir_y = effect_data["direction_y"]
-            max_range = effect_data["max_range"]
-            damage = effect_data["damage"]
-            width = effect_data["width"]
+            # CREATE PROJECTILE instead of instant raycast
+            from server.models.projectile import Projectile
             
-            # Raycast to find first hit
-            end_x = start_x + dir_x * max_range
-            end_y = start_y + dir_y * max_range
+            projectile = Projectile(
+                projectile_id=0,  # Will be set by match.add_projectile()
+                skill_id=skill.skill_id,
+                caster_id=caster.player_id,
+                x=effect_data["start_x"],
+                y=effect_data["start_y"],
+                direction_x=effect_data["direction_x"],
+                direction_y=effect_data["direction_y"],
+                speed=effect_data["speed"],
+                damage=effect_data["damage"],
+                max_range=effect_data["max_range"],
+                width=effect_data["width"],
+                piercing=effect_data.get("piercing", False)
+            )
             
-            # Check line intersection with all players
-            hit_player = None
-            min_distance = float('inf')
+            match.add_projectile(projectile)
+            print(f"[Skill] {caster.username} fired {skill.name} projectile")
+        
+        elif category == "HOMING":
+            # CREATE HOMING PROJECTILE instead of instant hit
+            from server.models.projectile import HomingProjectile
             
-            for player in match.players.values():
-                if player.player_id == caster.player_id:
-                    continue
-                
-                # Calculate distance from player to line
-                # Point to line distance formula
-                dx = end_x - start_x
-                dy = end_y - start_y
-                
-                px = player.x - start_x
-                py = player.y - start_y
-                
-                # Project point onto line
-                line_length_sq = dx * dx + dy * dy
-                if line_length_sq == 0:
-                    continue
-                
-                t = max(0, min(1, (px * dx + py * dy) / line_length_sq))
-                
-                # Closest point on line
-                closest_x = start_x + t * dx
-                closest_y = start_y + t * dy
-                
-                # Distance from player to closest point
-                dist_x = player.x - closest_x
-                dist_y = player.y - closest_y
-                dist = math.sqrt(dist_x * dist_x + dist_y * dist_y)
-                
-                # Check if hit (within projectile width)
-                if dist <= width:
-                    # Calculate distance from start to hit
-                    hit_dist = math.sqrt((closest_x - start_x)**2 + (closest_y - start_y)**2)
-                    
-                    # First hit only (unless piercing)
-                    if hit_dist < min_distance:
-                        min_distance = hit_dist
-                        hit_player = player
-                        
-                        # If not piercing, break after first hit
-                        if not effect_data.get("piercing", False):
-                            break
+            projectile = HomingProjectile(
+                projectile_id=0,
+                skill_id=skill.skill_id,
+                caster_id=caster.player_id,
+                x=caster.x,
+                y=caster.y,
+                direction_x=effect_data["direction_x"],
+                direction_y=effect_data["direction_y"],
+                speed=effect_data["speed"],
+                damage=effect_data["damage"],
+                turn_rate=effect_data["turn_rate"],
+                max_lifetime=effect_data["max_lifetime"]
+            )
             
-            if hit_player:
-                hit_player.take_damage(damage, caster.player_id)
-                print(f"[Skill] Skillshot hit {hit_player.username} for {damage} damage")
-            else:
-                print(f"[Skill] Skillshot missed")
+            match.add_projectile(projectile)
+            print(f"[Skill] {caster.username} launched homing {skill.name}")
         
         elif category == "AOE":
             # Damage all players in radius
@@ -289,66 +289,44 @@ class ServerPacketHandler:
                     player.take_damage(damage, caster.player_id)
                     print(f"[Skill] Range hit {player.username} for {damage} damage")
         
-        elif category == "HOMING":
-            # Find nearest enemy and hit them (simplified instant version)
-            # In future, create homing projectile entity
-            nearest_enemy = None
-            min_distance = float('inf')
-            
-            for player in match.players.values():
-                if player.player_id == caster.player_id:
-                    continue
-                
-                dx = player.x - caster.x
-                dy = player.y - caster.y
-                distance = math.sqrt(dx**2 + dy**2)
-                
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest_enemy = player
-            
-            if nearest_enemy:
-                damage = effect_data["damage"]
-                nearest_enemy.take_damage(damage, caster.player_id)
-                print(f"[Skill] Homing hit {nearest_enemy.username} for {damage} damage")
-            else:
-                print(f"[Skill] Homing found no target")
-        
         elif category == "CHANNELING":
             # Start channeling state (continuous damage)
             # For now, treat as instant damage in cone
             # TODO: Implement proper channeling with continuous damage
-            damage = effect_data["damage_per_second"]
-            max_range = effect_data["max_range"]
-            dir_x = effect_data["direction_x"]
-            dir_y = effect_data["direction_y"]
-            
-            # Apply instant damage to first enemy in beam
-            for player in match.players.values():
-                if player.player_id == caster.player_id:
-                    continue
-                
-                # Check if in beam direction
-                to_player_x = player.x - caster.x
-                to_player_y = player.y - caster.y
-                distance = math.sqrt(to_player_x**2 + to_player_y**2)
-                
-                if distance > max_range:
-                    continue
-                
-                # Normalize
-                if distance > 0:
-                    to_player_x /= distance
-                    to_player_y /= distance
-                
-                # Check angle (dot product)
-                dot = to_player_x * dir_x + to_player_y * dir_y
-                
-                if dot > 0.95:  # ~18 degree cone
-                    player.take_damage(damage * 0.5, caster.player_id)  # Half damage per tick
-                    print(f"[Skill] Channeling hit {player.username} for {damage * 0.5} damage")
-                    # break  # Only first hit
-                    # -> Allow multiple hits in cone
+
+            if not self.chanelling_clicks_activate:
+                self.chanelling_clicks_activate == True
+                damage = effect_data.get("damage", 2)
+                max_range = effect_data["max_range"]
+                dir_x = effect_data["direction_x"]
+                dir_y = effect_data["direction_y"]
+                for player in match.players.values():
+                    if player.player_id == caster.player_id:
+                        continue
+                    
+                    # Check if in beam direction
+                    to_player_x = player.x - caster.x
+                    to_player_y = player.y - caster.y
+                    distance = math.sqrt(to_player_x**2 + to_player_y**2)
+                    
+                    if distance > max_range:
+                        continue
+                    
+                    # Normalize
+                    if distance > 0:
+                        to_player_x /= distance
+                        to_player_y /= distance
+                    
+                    # Check angle (dot product)
+                    dot = to_player_x * dir_x + to_player_y * dir_y
+                    
+                    if dot > 0.95:  # ~18 degree cone
+                        player.continuous_damage_tick(damage * 0.5, caster.player_id)  # Half damage per tick
+                        print(f"[Skill] Channeling hit {player.username} for {damage * 0.5} damage")
+                        # -> Allow multiple hits in cone
+            else:
+                self.chanelling_clicks_activate == False
+
         
         elif category == "DEFENSIVE":
             # Apply shield buff to caster
@@ -379,8 +357,76 @@ class ServerPacketHandler:
                     print(f"[Skill] Applied {cc_type} to {player.username}")
         
         elif category == "PASSIVE":
-            # Passives don't have activation effects
-            print(f"[Skill] Passive skills don't have cast effects")
+            # Passives are applied automatically on match start
+            # No cast effects needed, already active
+            print(f"[Skill] Passive {skill.name} is always active (bonuses already applied)")
+        
+        elif category == "HEAL":
+            # Heal skills - restore health to caster and/or allies
+            heal_amount = effect_data["heal_amount"]
+            center_x = effect_data["center_x"]
+            center_y = effect_data["center_y"]
+            radius = effect_data["radius"]
+            self_only = effect_data["self_only"]
+            
+            if self_only or radius == 0:
+                # Heal only caster
+                caster.apply_heal(heal_amount)
+            else:
+                # Heal caster and nearby allies
+                caster.apply_heal(heal_amount)
+                
+                # TODO: Implement team system to heal allies only
+                # For now, heal all nearby players (including enemies - be careful!)
+                for player in match.players.values():
+                    if player.player_id == caster.player_id:
+                        continue
+                    
+                    dx = player.x - center_x
+                    dy = player.y - center_y
+                    distance = math.sqrt(dx**2 + dy**2)
+                    
+                    if distance <= radius:
+                        player.apply_heal(heal_amount)
+        
+        elif category == "DISAPPEAR":
+            # Invisibility/stealth
+            duration = effect_data["duration"]
+            speed_bonus = effect_data["speed_bonus"]
+            
+            caster.apply_invisibility(duration, speed_bonus)
+        
+        elif category == "DASH":
+            # Skill-based dash/blink
+            direction_x = effect_data["direction_x"]
+            direction_y = effect_data["direction_y"]
+            distance = effect_data["distance"]
+            instant = effect_data["instant"]
+            mana_cost = skill.mana_cost
+            if instant:
+                if caster.can_teleport(mana_cost):
+                    # Teleport
+                    caster.teleport(distance, mana_cost)
+            else:
+                # Fast dash (similar to space dash but with skill distance)
+                caster.dash_direction_x = direction_x
+                caster.dash_direction_y = direction_y
+                caster.is_dashing = True
+                caster.dash_end_time = time.time() + 0.3  # Dash for 0.3 seconds
+                print(f"[Skill] {caster.username} dashed")
+        
+        elif category == "MANA_REGAIN":
+            # Restore mana
+            mana_amount = effect_data["mana_amount"]
+            over_time = effect_data["over_time"]
+            
+            if over_time:
+                # TODO: Implement mana regen over time
+                # For now, instant restoration
+                caster.restore_mana(mana_amount)
+            else:
+                # Instant mana restoration
+                caster.restore_mana(mana_amount)
     
     async def _handle_chat(self, client: ClientConnection, packet: Packet):
         """Handle chat message."""
@@ -443,3 +489,21 @@ class ServerPacketHandler:
             countdown=lobby_data["countdown"]
         )
         await self.server.socket.broadcast(lobby_packet)
+
+    async def _handle_stop_channeling(self, client: ClientConnection, packet: Packet):
+        """Handle stopping channeling skills."""
+        if not client.player_id or not client.user_id:
+            return
+        
+        if not self.server.match_manager.active_match:
+            return
+        
+        match = self.server.match_manager.active_match
+        player = match.players.get(client.player_id)
+        
+        if player and player.is_channeling:
+            player.stop_channeling()
+            print(f"[Server] {player.username} stopped channeling")
+
+
+

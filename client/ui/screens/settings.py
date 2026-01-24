@@ -15,31 +15,58 @@ class SettingsScreen(UIScreen):
     def __init__(self, manager):
         super().__init__(manager)
         
+        # Enable scrolling
+        self.scrollable = True
+        self.scroll_start_y = 150
+        
         # Back button
         self.back_button = Button(
             20, SCREEN_HEIGHT - 70, 120, 50, "Back", self.go_back
         )
+        
+        # Calculate content height
+        total_items = 24
+        item_spacing = 35
+        start_y = 180
+        self.set_content_height(start_y + (total_items * item_spacing))
     
     def go_back(self):
-        """Navigate back to home."""
+        """Navigate back to lobby."""
         self.manager.switch_to("lobby")
     
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""
+        # Parent handles scrolling
+        super().handle_event(event)
+        
+        # Handle button clicks
         self.back_button.handle_event(event)
     
     def render(self, screen: pygame.Surface):
         """Render the settings screen."""
         screen.fill(UI_BG_COLOR)
         
-        # Title
+        # Title (fixed, doesn't scroll)
         title_font = pygame.font.Font(None, 64)
         title_surface = title_font.render("SETTINGS & INFO", True, (255, 215, 0))
         title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 80))
         screen.blit(title_surface, title_rect)
         
-        # Game Info
-        y_offset = 180
+        # Begin scrollable region
+        self.begin_scrollable_region(screen)
+        
+        # Render scrollable content
+        self._render_content(screen)
+        
+        # End scrollable region (also draws scroll indicator)
+        self.end_scrollable_region(screen)
+        
+        # Back button (fixed, doesn't scroll)
+        self.back_button.render(screen)
+    
+    def _render_content(self, screen: pygame.Surface):
+        """Render scrollable content."""
+        y_offset = self.get_scrolled_y(180)
         font = pygame.font.Font(None, 32)
         
         info_items = [
@@ -60,6 +87,8 @@ class SettingsScreen(UIScreen):
             ("Attack", "Left Click", (255, 255, 255)),
             ("Skill 1", "Q", (255, 255, 255)),
             ("Skill 2", "E", (255, 255, 255)),
+            ("Skill 3", "R", (255, 255, 255)),
+            ("Skill 4", "F", (255, 255, 255)),
             ("", None, None),
             ("ABOUT", None, (255, 215, 0)),
             ("", None, None),
@@ -69,28 +98,29 @@ class SettingsScreen(UIScreen):
         ]
         
         for item in info_items:
-            if item[1] is None and item[0]:
-                # Section header
-                text = font.render(item[0], True, item[2])
-                text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
-                screen.blit(text, text_rect)
-            elif item[0] and item[1]:
-                # Key-value pair
-                label = font.render(f"{item[0]}:", True, (200, 200, 200))
-                value = font.render(str(item[1]), True, item[2])
-                
-                label_rect = label.get_rect(midright=(SCREEN_WIDTH // 2 - 20, y_offset))
-                value_rect = value.get_rect(midleft=(SCREEN_WIDTH // 2 + 20, y_offset))
-                
-                screen.blit(label, label_rect)
-                screen.blit(value, value_rect)
-            elif item[1]:
-                # Centered text
-                text = font.render(item[1], True, item[2])
-                text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
-                screen.blit(text, text_rect)
+            # Only render if visible (optimization)
+            if self.is_visible(y_offset):
+                if item[1] is None and item[0]:
+                    # Section header
+                    text = font.render(item[0], True, item[2])
+                    text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
+                    screen.blit(text, text_rect)
+                elif item[0] and item[1]:
+                    # Key-value pair
+                    label = font.render(f"{item[0]}:", True, (200, 200, 200))
+                    value = font.render(str(item[1]), True, item[2])
+                    
+                    label_rect = label.get_rect(midright=(SCREEN_WIDTH // 2 - 20, y_offset))
+                    value_rect = value.get_rect(midleft=(SCREEN_WIDTH // 2 + 20, y_offset))
+                    
+                    screen.blit(label, label_rect)
+                    screen.blit(value, value_rect)
+                elif item[1]:
+                    # Centered text
+                    text = font.render(item[1], True, item[2])
+                    text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
+                    screen.blit(text, text_rect)
             
-            y_offset += 35
-        
+            y_offset += 35        
         # Back button
         self.back_button.render(screen)

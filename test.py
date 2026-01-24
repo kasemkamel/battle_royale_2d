@@ -1,3 +1,5 @@
-l1 = ["water", "fire", "earth", "air"]
-l2 = ["fire", "water",  "air", "earth"]
-print(sorted(l1) == sorted(l2))
+# how to use the emoji_map
+from shared.constants import emoji_map
+
+print(emoji_map["gear"])
+

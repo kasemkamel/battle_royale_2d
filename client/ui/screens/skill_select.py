@@ -2,6 +2,7 @@
 """
 Skill Selection Screen
 Allows players to select 4 skills for their loadout before joining matches.
+Now with scrollable skill grid and info panel!
 """
 
 import pygame
@@ -76,21 +77,32 @@ class SkillCard:
     """Represents a skill in the selection grid."""
     
     def __init__(self, x: int, y: int, width: int, height: int, skill_data: dict):
+        self.base_x = x  # Store base positions
+        self.base_y = y
         self.rect = pygame.Rect(x, y, width, height)
         self.skill = skill_data
         self.is_hovered = False
     
-    def handle_event(self, event: pygame.event.Event) -> bool:
-        """Handle mouse events. Returns True if clicked."""
+    def handle_event(self, event: pygame.event.Event, scroll_offset: int) -> bool:
+        """Handle mouse events with scroll offset. Returns True if clicked."""
+        # Temporarily adjust for scroll
+        self.rect.y = self.base_y - scroll_offset
+        
         if event.type == pygame.MOUSEMOTION:
             self.is_hovered = self.rect.collidepoint(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1 and self.is_hovered:
+                self.rect.y = self.base_y  # Restore
                 return True
+        
+        self.rect.y = self.base_y  # Restore
         return False
     
-    def render(self, screen: pygame.Surface):
-        """Render the skill card."""
+    def render(self, screen: pygame.Surface, scroll_offset: int):
+        """Render the skill card with scroll offset."""
+        # Adjust position for scroll
+        self.rect.y = self.base_y - scroll_offset
+        
         # Background
         bg_color = (70, 110, 150) if self.is_hovered else (50, 90, 130)
         pygame.draw.rect(screen, bg_color, self.rect, border_radius=3)
@@ -107,15 +119,23 @@ class SkillCard:
         cat_surface = cat_font.render(self.skill["category"], True, (255, 215, 0))
         cat_rect = cat_surface.get_rect(midbottom=(self.rect.centerx, self.rect.bottom - 5))
         screen.blit(cat_surface, cat_rect)
+        
+        # Restore position
+        self.rect.y = self.base_y
 
 
 class SkillSelectionScreen(UIScreen):
-    """Skill selection interface."""
+    """Skill selection interface with scrollable grid and info panel."""
     
     def __init__(self, manager):
         super().__init__(manager)
         
-        # Skill slots (top of screen)
+        # Enable scrolling for skill grid
+        self.scrollable = True
+        self.scroll_start_y = 200
+        self.scroll_end_y = SCREEN_HEIGHT - 260  # Leave room for info panel
+        
+        # Skill slots (top of screen - fixed, non-scrolling)
         slot_width = 180
         slot_height = 100
         slot_spacing = 20
@@ -135,6 +155,11 @@ class SkillSelectionScreen(UIScreen):
         self.selected_skill = None
         self.selected_slot = None  # Which box is selected for removal
         
+        # Info panel scrolling
+        self.info_scroll_offset = 0
+        self.info_max_scroll = 0
+        self.info_content_height = 0
+        
         # Buttons
         self.back_button = Button(
             20, SCREEN_HEIGHT - 70, 120, 50, "Back", self.go_back
@@ -146,10 +171,6 @@ class SkillSelectionScreen(UIScreen):
         
         self.add_button = None  # Created dynamically
         self.remove_button = None  # Created dynamically
-        
-        # Scroll offset for skill list
-        self.scroll_offset = 0
-        self.max_scroll = 0
         
         # Status message
         self.status_message = ""
@@ -195,11 +216,10 @@ class SkillSelectionScreen(UIScreen):
             
             self.skill_cards.append(SkillCard(x, y, card_width, card_height, skill))
         
-        # Calculate max scroll
+        # Calculate max scroll for skill grid
         total_rows = (len(self.all_skills) + cards_per_row - 1) // cards_per_row
-        total_height = total_rows * (card_height + card_spacing)
-        visible_height = SCREEN_HEIGHT - start_y - 100
-        self.max_scroll = max(0, total_height - visible_height)
+        total_height = start_y + (total_rows * (card_height + card_spacing))
+        self.set_content_height(total_height)
     
     def _load_current_loadout(self):
         """Load player's current skill loadout into boxes."""
@@ -251,7 +271,6 @@ class SkillSelectionScreen(UIScreen):
         if success:
             self.status_message = "Loadout saved!"
             self.status_color = (0, 255, 0)
-            # Loadout is already updated in game state by game.py
             print(f"[SkillSelect] Loadout saved successfully: {loadout}")
         else:
             self.status_message = f"Error: {message}"
@@ -260,10 +279,18 @@ class SkillSelectionScreen(UIScreen):
     
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""
-        # Handle scroll
+        # Check if mouse is over info panel for its scrolling
         if event.type == pygame.MOUSEWHEEL:
-            self.scroll_offset -= event.y * 30
-            self.scroll_offset = max(0, min(self.scroll_offset, self.max_scroll))
+            mouse_pos = pygame.mouse.get_pos()
+            info_panel_rect = pygame.Rect(SCREEN_WIDTH - 350, SCREEN_HEIGHT - 240, 330, 150)
+            
+            if info_panel_rect.collidepoint(mouse_pos):
+                # Scroll info panel
+                self.info_scroll_offset -= event.y * 20
+                self.info_scroll_offset = max(0, min(self.info_scroll_offset, self.info_max_scroll))
+            else:
+                # Scroll skill grid (parent class handles this)
+                super().handle_event(event)
         
         # Handle buttons
         self.back_button.handle_event(event)
@@ -277,7 +304,7 @@ class SkillSelectionScreen(UIScreen):
             if self.remove_button.handle_event(event):
                 self._remove_selected_skill()
         
-        # Handle skill boxes
+        # Handle skill boxes (fixed, no scroll)
         for box in self.skill_boxes:
             if box.handle_event(event):
                 if box.skill:
@@ -285,35 +312,51 @@ class SkillSelectionScreen(UIScreen):
                     self.selected_skill = box.skill
                     self.selected_slot = box
                     self._create_remove_button()
+                    self._update_info_scroll()
                 else:
                     # Empty slot clicked
                     self.selected_slot = None
         
         # Handle skill cards (with scroll offset)
         for card in self.skill_cards:
-            # Adjust card position for scroll
-            original_y = card.rect.y
-            card.rect.y -= self.scroll_offset
-            
-            if card.handle_event(event):
+            if card.handle_event(event, self.scroll_offset):
                 self.selected_skill = card.skill
                 self.selected_slot = None
                 self._create_add_button()
-            
-            # Restore position
-            card.rect.y = original_y
+                self._update_info_scroll()
+    
+    def _update_info_scroll(self):
+        """Update info panel scroll based on selected skill content."""
+        if not self.selected_skill:
+            self.info_content_height = 0
+            self.info_max_scroll = 0
+            self.info_scroll_offset = 0
+            return
+        
+        # Calculate info panel content height
+        base_height = 135  # Base stats and info
+        
+        # Add height for description if it exists
+        if self.selected_skill.get('description'):
+            desc_lines = len(self.selected_skill['description']) // 40 + 1
+            base_height += desc_lines * 20
+        
+        self.info_content_height = base_height
+        panel_visible_height = 130  # Visible area of info panel
+        self.info_max_scroll = max(0, self.info_content_height - panel_visible_height)
+        self.info_scroll_offset = 0  # Reset scroll when selecting new skill
     
     def _create_add_button(self):
         """Create the Add button in info panel."""
         self.add_button = Button(
-            SCREEN_WIDTH - 320, SCREEN_HEIGHT - 180, 100, 40, "Add", None
+            SCREEN_WIDTH - 130, SCREEN_HEIGHT - 140, 100, 40, "Add", None
         )
         self.remove_button = None
     
     def _create_remove_button(self):
         """Create the Remove button in info panel."""
         self.remove_button = Button(
-            SCREEN_WIDTH - 320, SCREEN_HEIGHT - 180, 100, 40, "Remove", None
+            SCREEN_WIDTH - 130, SCREEN_HEIGHT - 140, 100, 40, "Remove", None
         )
         self.add_button = None
     
@@ -350,18 +393,19 @@ class SkillSelectionScreen(UIScreen):
             self.selected_skill = None
             self.selected_slot = None
             self.remove_button = None
+            self._update_info_scroll()
     
     def render(self, screen: pygame.Surface):
         """Render the skill selection screen."""
         screen.fill(UI_BG_COLOR)
         
-        # Title
+        # Title (fixed)
         title_font = pygame.font.Font(None, 56)
         title_surface = title_font.render("SKILL SELECTION", True, (255, 215, 0))
         title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 20))
         screen.blit(title_surface, title_rect)
         
-        # Skill boxes (equipped skills)
+        # Skill boxes (fixed, non-scrolling)
         for box in self.skill_boxes:
             box.render(screen)
         
@@ -373,30 +417,23 @@ class SkillSelectionScreen(UIScreen):
         label_surface = label_font.render("Available Skills", True, (200, 200, 200))
         screen.blit(label_surface, (50, 175))
         
-        # Create clip region for scrollable area
-        clip_rect = pygame.Rect(0, 200, SCREEN_WIDTH, SCREEN_HEIGHT - 300)
-        screen.set_clip(clip_rect)
+        # Begin scrollable region for skill cards
+        self.begin_scrollable_region(screen)
         
         # Skill cards (scrollable)
         for card in self.skill_cards:
-            # Adjust position for scroll
-            original_y = card.rect.y
-            card.rect.y -= self.scroll_offset
-            
+            scrolled_y = card.base_y - self.scroll_offset
             # Only render if visible
-            if card.rect.bottom > 200 and card.rect.top < SCREEN_HEIGHT - 100:
-                card.render(screen)
-            
-            # Restore position
-            card.rect.y = original_y
+            if scrolled_y + 70 > self.scroll_start_y and scrolled_y < self.scroll_end_y:
+                card.render(screen, self.scroll_offset)
         
-        # Remove clip
-        screen.set_clip(None)
+        # End scrollable region
+        self.end_scrollable_region(screen)
         
-        # Info panel (bottom right)
+        # Info panel (bottom right) - now scrollable
         self._draw_info_panel(screen)
         
-        # Buttons
+        # Buttons (fixed)
         self.back_button.render(screen)
         self.save_button.render(screen)
         
@@ -413,16 +450,21 @@ class SkillSelectionScreen(UIScreen):
             screen.blit(status_surface, status_rect)
     
     def _draw_info_panel(self, screen: pygame.Surface):
-        """Draw skill info panel."""
+        """Draw scrollable skill info panel."""
         panel_rect = pygame.Rect(SCREEN_WIDTH - 350, SCREEN_HEIGHT - 240, 330, 150)
         pygame.draw.rect(screen, (40, 40, 50), panel_rect, border_radius=5)
         pygame.draw.rect(screen, (150, 150, 150), panel_rect, width=2, border_radius=5)
         
         if self.selected_skill:
+            # Create clip region for scrollable content
+            content_rect = pygame.Rect(panel_rect.x + 5, panel_rect.y + 5, 
+                                      panel_rect.width - 10, panel_rect.height - 10)
+            screen.set_clip(content_rect)
+            
             font = pygame.font.Font(None, 26)
             small_font = pygame.font.Font(None, 20)
             
-            y_offset = panel_rect.y + 10
+            y_offset = panel_rect.y + 10 - self.info_scroll_offset
             
             # Skill name
             name_surface = font.render(self.selected_skill["name"], True, (255, 215, 0))
@@ -447,6 +489,23 @@ class SkillSelectionScreen(UIScreen):
                 stat_surface = small_font.render(stat, True, (200, 200, 200))
                 screen.blit(stat_surface, (panel_rect.x + 10, y_offset))
                 y_offset += 20
+            
+            # Description (if exists)
+            if self.selected_skill.get('description'):
+                y_offset += 10
+                desc_lines = self._wrap_text(self.selected_skill['description'], 
+                                            small_font, panel_rect.width - 20)
+                for line in desc_lines:
+                    line_surface = small_font.render(line, True, (180, 180, 180))
+                    screen.blit(line_surface, (panel_rect.x + 10, y_offset))
+                    y_offset += 18
+            
+            # Remove clip
+            screen.set_clip(None)
+            
+            # Draw scroll indicator for info panel if needed
+            if self.info_max_scroll > 0:
+                self._draw_info_scroll_indicator(screen, panel_rect)
         else:
             # Prompt
             font = pygame.font.Font(None, 22)
@@ -454,3 +513,43 @@ class SkillSelectionScreen(UIScreen):
             text_surface = font.render(text, True, (120, 120, 120))
             text_rect = text_surface.get_rect(center=panel_rect.center)
             screen.blit(text_surface, text_rect)
+    
+    def _draw_info_scroll_indicator(self, screen: pygame.Surface, panel_rect: pygame.Rect):
+        """Draw scroll indicator for info panel."""
+        bar_x = panel_rect.right - 8
+        bar_y = panel_rect.y + 5
+        bar_width = 5
+        bar_height = panel_rect.height - 10
+        
+        # Background
+        pygame.draw.rect(screen, (60, 60, 60), 
+                        (bar_x, bar_y, bar_width, bar_height), border_radius=2)
+        
+        # Thumb
+        if self.info_max_scroll > 0:
+            visible_ratio = bar_height / self.info_content_height
+            thumb_height = max(20, bar_height * visible_ratio)
+            thumb_y = bar_y + (self.info_scroll_offset / self.info_max_scroll) * (bar_height - thumb_height)
+            
+            pygame.draw.rect(screen, (150, 150, 150), 
+                            (bar_x, thumb_y, bar_width, thumb_height), border_radius=2)
+    
+    def _wrap_text(self, text: str, font: pygame.font.Font, max_width: int) -> list:
+        """Wrap text to fit within max width."""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            if font.size(test_line)[0] <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines

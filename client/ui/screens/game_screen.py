@@ -24,6 +24,8 @@ class GameScreen(UIScreen):
         self.players = {}  # player_id -> Player
         self.local_player_id = None
         
+        self.projectiles = []
+
         # Camera
         self.camera_x = 0
         self.camera_y = 0
@@ -44,7 +46,6 @@ class GameScreen(UIScreen):
         # Skill system
         self.equipped_skills = []  # Player's equipped skills
         self.active_skill_index = None  # Which skill is being aimed (0-3)
-        self.skill_cooldowns = [0, 0, 0, 0]  # Remaining cooldown for each skill
     
     def on_enter(self):
         """Called when entering game screen."""
@@ -59,39 +60,48 @@ class GameScreen(UIScreen):
     
     def update_world_state(self, data: dict):
         """Update game state from server."""
-        # Update players
-        player_data_list = data.get("players", [])
-        
-        # Track which players are still in the game
-        current_player_ids = set()
-        
-        for player_data in player_data_list:
-            player_id = player_data.get("player_id")
-            current_player_ids.add(player_id)
+        try:
+            # Update players
+            player_data_list = data.get("players", [])
             
-            if player_id not in self.players:
-                # Create new player
-                self.players[player_id] = Player(
-                    player_id,
-                    player_data.get("username", "Unknown"),
-                    player_data.get("x", 0),
-                    player_data.get("y", 0)
-                )
+            # Track which players are still in the game
+            current_player_ids = set()
             
-            # Update player
-            self.players[player_id].update_from_server(player_data)
-        
-        # Remove disconnected players
-        for player_id in list(self.players.keys()):
-            if player_id not in current_player_ids:
-                del self.players[player_id]
-        
-        # Update zone
-        zone_data = data.get("zone", {})
-        self.zone_center_x = zone_data.get("center_x", 0)
-        self.zone_center_y = zone_data.get("center_y", 0)
-        self.zone_radius = zone_data.get("radius", 0)
-        self.zone_shrinking = zone_data.get("shrinking", False)
+            for player_data in player_data_list:
+                player_id = player_data.get("player_id")
+                current_player_ids.add(player_id)
+                
+                if player_id not in self.players:
+                    # Create new player
+                    self.players[player_id] = Player(
+                        player_id,
+                        player_data.get("username", "Unknown"),
+                        player_data.get("x", 0),
+                        player_data.get("y", 0)
+                    )
+                
+                # Update player
+                self.players[player_id].update_from_server(player_data)
+            
+            # Remove disconnected players
+            for player_id in list(self.players.keys()):
+                if player_id not in current_player_ids:
+                    del self.players[player_id]
+            
+            # Update projectiles
+            self.projectiles = data.get("projectiles", [])
+            
+            # Update zone
+            zone_data = data.get("zone", {})
+            self.zone_center_x = zone_data.get("center_x", 0)
+            self.zone_center_y = zone_data.get("center_y", 0)
+            self.zone_radius = zone_data.get("radius", 0)
+            self.zone_shrinking = zone_data.get("shrinking", False)
+            
+        except Exception as e:
+            print(f"[GameScreen] ERROR updating world state: {e}")
+            import traceback
+            traceback.print_exc()
     
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""
@@ -123,10 +133,6 @@ class GameScreen(UIScreen):
     
     def update(self, delta_time: float):
         """Update game logic."""
-        # Update skill cooldowns
-        for i in range(len(self.skill_cooldowns)):
-            if self.skill_cooldowns[i] > 0:
-                self.skill_cooldowns[i] = max(0, self.skill_cooldowns[i] - delta_time)
         
         # Get current mouse position (in case no motion event)
         mouse_pos = pygame.mouse.get_pos()
@@ -184,7 +190,7 @@ class GameScreen(UIScreen):
         
         # Draw zone (safe area)
         self._draw_zone(screen)
-        
+        self._draw_projectiles(screen)
         # Draw all players
         for player in self.players.values():
             player.render(screen, self.camera_x, self.camera_y)
@@ -470,6 +476,11 @@ class GameScreen(UIScreen):
         pygame.draw.rect(screen, (30, 30, 40, 200), bg_rect, border_radius=5)
         pygame.draw.rect(screen, (100, 100, 100), bg_rect, width=2, border_radius=5)
         
+        # Get local player for cooldowns
+        local_player = None
+        if self.local_player_id and self.local_player_id in self.players:
+            local_player = self.players[self.local_player_id]
+        
         # Skill slots
         slot_size = 70
         slot_spacing = 10
@@ -484,7 +495,11 @@ class GameScreen(UIScreen):
             
             if i < len(self.equipped_skills):
                 skill = self.equipped_skills[i]
-                cooldown = self.skill_cooldowns[i]
+                
+                # Get cooldown from server (via local_player)
+                cooldown = 0
+                if local_player and hasattr(local_player, 'skill_cooldowns') and i < len(local_player.skill_cooldowns):
+                    cooldown = local_player.skill_cooldowns[i]
                 
                 # Determine slot color based on cooldown
                 if cooldown > 0:
@@ -530,21 +545,58 @@ class GameScreen(UIScreen):
             key_surface = key_font.render(keys[i], True, (255, 215, 0))
             key_rect = key_surface.get_rect(bottomright=(x + slot_size - 5, y + slot_size - 5))
             screen.blit(key_surface, key_rect)
-    
+
+    def _draw_projectiles(self, screen: pygame.Surface):
+        """Draw all active projectiles."""
+        for proj in self.projectiles:
+            # Get projectile position in screen coordinates
+            proj_x = int(proj["x"] - self.camera_x)
+            proj_y = int(proj["y"] - self.camera_y)
+            
+            # Get direction for orientation
+            dir_x = proj.get("direction_x", 1)
+            dir_y = proj.get("direction_y", 0)
+            width = int(proj.get("width", 20))
+            
+            # Draw projectile as circle with direction line
+            pygame.draw.circle(screen, (255, 200, 0), (proj_x, proj_y), width // 2, 0)
+            pygame.draw.circle(screen, (255, 255, 100), (proj_x, proj_y), width // 2, 2)
+            
+            # Draw direction indicator
+            end_x = proj_x + dir_x * width
+            end_y = proj_y + dir_y * width
+            pygame.draw.line(screen, (255, 100, 0), (proj_x, proj_y), (int(end_x), int(end_y)), 3)
+
     def _cast_skill(self, skill_index: int):
         """Cast skill at given index."""
+        # Validate skill index
         if skill_index >= len(self.equipped_skills):
             print(f"[Skill] No skill in slot {skill_index}")
             return
         
         skill = self.equipped_skills[skill_index]
         
-        # Check cooldown
-        if self.skill_cooldowns[skill_index] > 0:
-            print(f"[Skill] {skill['name']} on cooldown")
+        # Get local player
+        if not self.local_player_id or self.local_player_id not in self.players:
+            print(f"[Skill] Cannot cast - no local player")
             return
         
-        # Send to server
+        local_player = self.players[self.local_player_id]
+        
+        # Check cooldown from server data
+        if hasattr(local_player, 'skill_cooldowns') and len(local_player.skill_cooldowns) > skill_index:
+            cooldown = local_player.skill_cooldowns[skill_index]
+            if cooldown > 0:
+                print(f"[Skill] {skill['name']} on cooldown ({cooldown:.1f}s)")
+                return
+        
+        # Check mana (client-side prediction)
+        mana_cost = skill.get("mana_cost", 0)
+        if local_player.mana < mana_cost:
+            print(f"[Skill] Not enough mana ({mana_cost} required, {int(local_player.mana)} available)")
+            return
+        
+        # Send USE_SKILL packet to server
         packet = Packet(PacketType.USE_SKILL, {
             "skill_index": skill_index,
             "mouse_world_x": self.mouse_world_x,
@@ -552,10 +604,7 @@ class GameScreen(UIScreen):
         })
         self.manager.game.network.send(packet)
         
-        # Start cooldown
-        self.skill_cooldowns[skill_index] = skill.get("cooldown", 5.0)
-        
-        print(f"[Skill] Cast {skill['name']}")
+        print(f"[Skill] Cast {skill['name']} at ({int(self.mouse_world_x)}, {int(self.mouse_world_y)})")
 
     def on_exit(self):
             """Called when leaving game screen."""

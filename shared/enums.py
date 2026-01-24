@@ -36,6 +36,7 @@ class PacketType(Enum):
     PLAYER_MOVE = auto()
     PLAYER_ATTACK = auto()
     USE_SKILL = auto()
+    STOP_CHANNELING = auto()
     PLAYER_DAMAGED = auto()
     PLAYER_DIED = auto()
     PLAYER_RESPAWN = auto()
@@ -96,6 +97,10 @@ class SkillType(Enum):
     DEFENSE = auto()
     MOVEMENT = auto()
     UTILITY = auto()
+    HEAL = auto()       # Healing skills
+    STEALTH = auto()    # Invisibility/disappear
+    MOBILITY = auto()   # Dash/blink
+    RESOURCE = auto()   # Mana/energy restoration
 
 
 class Direction(Enum):

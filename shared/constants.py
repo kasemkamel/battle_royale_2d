@@ -1,4 +1,6 @@
 # shared/constants.py
+from emoji import emojize
+
 """
 Shared Constants
 Contains all game constants shared between client and server.
@@ -30,12 +32,12 @@ PLAYER_SPEED = 200  # Pixels per second (base speed)
 PLAYER_SPRINT_MULTIPLIER = 1.5  # Sprint is 50% faster
 PLAYER_SPRINT_MANA_COST = 5  # Mana per second while sprinting
 PLAYER_DASH_SPEED = 800  # Dash speed in pixels/second
-PLAYER_DASH_DURATION = 0.2  # Dash lasts 0.2 seconds
+PLAYER_DASH_DURATION = 0.3  # Dash lasts 0.2 seconds
 PLAYER_DASH_COOLDOWN = 3.0  # Dash cooldown in seconds
 PLAYER_DASH_MANA_COST = 15  # Mana cost per dash
 PLAYER_MAX_HEALTH = 100
 PLAYER_MAX_MANA = 100
-PLAYER_MANA_REGEN = 15  # Mana per second
+PLAYER_MANA_REGEN = 1  # Mana per second
 PLAYER_RESPAWN_TIME = 5  # Seconds
 
 # Match Configuration
@@ -45,9 +47,9 @@ LOBBY_WAIT_TIME = 10  # Seconds to wait before starting
 MATCH_DURATION = 600  # Seconds (10 minutes)
 
 # Zone Configuration (Battle Royale shrinking zone)
-ZONE_INITIAL_RADIUS = 1400
+ZONE_INITIAL_RADIUS = 1500
 ZONE_SHRINK_RATE = 2  # Pixels per second
-ZONE_DAMAGE_PER_SECOND = 5
+ZONE_DAMAGE_PER_SECOND = 1
 
 # Skill Configuration
 MAX_SKILLS = 4
@@ -70,6 +72,7 @@ COLOR_BLACK = (0, 0, 0)
 COLOR_RED = (255, 0, 0)
 COLOR_GREEN = (0, 255, 0)
 COLOR_BLUE = (0, 0, 255)
+COLOR_LIGHT_BLUE = (100, 100, 255, 128)
 COLOR_YELLOW = (255, 255, 0)
 COLOR_GRAY = (128, 128, 128)
 COLOR_DARK_GRAY = (64, 64, 64)
@@ -80,3 +83,4 @@ UI_BUTTON_COLOR = (70, 130, 180)
 UI_BUTTON_HOVER = (100, 149, 237)
 UI_TEXT_COLOR = (255, 255, 255)
 UI_ACCENT_COLOR = (255, 215, 0)
+

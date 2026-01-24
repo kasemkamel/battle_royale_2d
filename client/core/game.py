@@ -152,12 +152,24 @@ class Game:
     
     def _handle_world_state(self, packet):
         """Handle world state update during gameplay."""
-        if self.ui_manager.current_screen_name == "game":
-            self.game_screen.update_world_state(packet.data)
-            
-            # Set local player ID if not set
-            if not self.game_screen.local_player_id and self.game_state.player_id:
-                self.game_screen.local_player_id = self.game_state.player_id
+        # DEBUG: Print first state received
+        if not hasattr(self, '_first_state_received'):
+            self._first_state_received = True
+            print(f"[DEBUG] First world state received:")
+            print(f"  Players: {len(packet.data.get('players', []))}")
+            for p in packet.data.get('players', []):
+                print(f"    - {p.get('username')}: cooldowns={p.get('skill_cooldowns', 'MISSING')}")
+        
+        try:
+            if self.ui_manager.current_screen_name == "game":
+                self.game_screen.update_world_state(packet.data)
+                
+                if not self.game_screen.local_player_id and self.game_state.player_id:
+                    self.game_screen.local_player_id = self.game_state.player_id
+        except Exception as e:
+            print(f"[Game] ERROR handling world state: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _handle_match_end(self, packet):
         """Handle match end."""

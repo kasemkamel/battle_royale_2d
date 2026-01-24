@@ -6,7 +6,7 @@ Client-side representation of a player for rendering and display.
 
 import pygame
 import math
-from shared.constants import PLAYER_WIDTH, PLAYER_HEIGHT, COLOR_BLUE, COLOR_RED, COLOR_GREEN, COLOR_WHITE, COLOR_YELLOW
+from shared.constants import COLOR_GRAY, COLOR_LIGHT_BLUE, PLAYER_WIDTH, PLAYER_HEIGHT, COLOR_BLUE, COLOR_RED, COLOR_GREEN, COLOR_WHITE, COLOR_YELLOW
 
 
 class Player:
@@ -35,7 +35,8 @@ class Player:
         self.is_sprinting = False
         self.is_dashing = False
         self.is_stunned = False
-        
+        self.is_invisible = False
+        self.skill_cooldowns = [0.0, 0.0, 0.0, 0.0]
         # Animation
         self.animation_frame = 0
     
@@ -52,6 +53,8 @@ class Player:
         self.is_sprinting = data.get("is_sprinting", False)
         self.is_dashing = data.get("is_dashing", False)
         self.is_stunned = data.get("is_stunned", False)
+        self.is_invisible = data.get("is_invisible", False)
+        self.skill_cooldowns = data.get("skill_cooldowns", [0.0, 0.0, 0.0, 0.0])
     
     def render(self, screen: pygame.Surface, camera_x: float = 0, camera_y: float = 0):
         """Render the player on screen."""
@@ -85,22 +88,39 @@ class Player:
         radius = self.width // 2
         
         # Choose color based on state
-        if self.is_dashing:
+        if self.is_invisible:
+            # Semi-transparent when invisible
+            color = COLOR_LIGHT_BLUE  # Light blue, transparent
+        elif self.is_dashing:
             color = COLOR_YELLOW
         elif self.is_stunned:
-            color = (128, 128, 128)  # Gray when stunned
+            color = COLOR_GRAY  # Gray when stunned
         else:
             color = self.color
         
         # Draw circle body
-        pygame.draw.circle(screen, color, (x, y), radius)
-        pygame.draw.circle(screen, COLOR_WHITE, (x, y), radius, 2)  # Outline
+        if self.is_invisible:
+            # Draw with alpha (transparent)
+            s = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(s, color, (radius, radius), radius)
+            screen.blit(s, (x - radius, y - radius))
+            
+            # Transparent outline
+            pygame.draw.circle(screen, (150, 150, 255), (x, y), radius, 2)
+        else:
+            # Normal rendering
+            pygame.draw.circle(screen, color, (x, y), radius)
+            pygame.draw.circle(screen, COLOR_WHITE, (x, y), radius, 2)  # Outline
         
         # Draw direction line from center to edge
         line_length = radius
         end_x = x + math.cos(self.rotation) * line_length
         end_y = y + math.sin(self.rotation) * line_length
-        pygame.draw.line(screen, COLOR_WHITE, (x, y), (end_x, end_y), 3)
+        
+        if self.is_invisible:
+            pygame.draw.line(screen, (200, 200, 255), (x, y), (end_x, end_y), 2)
+        else:
+            pygame.draw.line(screen, COLOR_WHITE, (x, y), (end_x, end_y), 3)
     
     def _draw_dash_trail(self, screen: pygame.Surface, x: int, y: int):
         """Draw dash effect."""
@@ -130,6 +150,7 @@ class Player:
         health_width = int(bar_width * health_ratio)
         health_rect = pygame.Rect(x - bar_width // 2, bar_y, health_width, bar_height)
         pygame.draw.rect(screen, COLOR_GREEN, health_rect)
+
     
     def _draw_mana_bar(self, screen: pygame.Surface, x: int, y: int):
             """Draw mana bar above health bar."""
@@ -147,6 +168,8 @@ class Player:
             mana_rect = pygame.Rect(x - bar_width // 2, bar_y, mana_width, bar_height)
             pygame.draw.rect(screen, (0, 200, 255), mana_rect)
 
+
+
     def _draw_username(self, screen: pygame.Surface, x: int, y: int):
         """Draw username below player."""
         font = pygame.font.Font(None, 20)
@@ -156,4 +179,3 @@ class Player:
     
     def __repr__(self):
         return f"Player({self.player_id}, '{self.username}', pos=({self.x:.1f}, {self.y:.1f}))"
-

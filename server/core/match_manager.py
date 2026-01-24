@@ -10,7 +10,7 @@ from typing import Dict, Optional
 from server.models.match import Match
 from shared.constants import TICK_RATE
 from shared.packets import WorldState, Packet
-from shared.enums import PacketType, PlayerState
+from shared.enums import MatchState, PacketType, PlayerState
 
 
 class MatchManager:
@@ -33,6 +33,7 @@ class MatchManager:
         self.next_match_id += 1
         
         match = Match(match_id)
+        print(f"[MatchManager] Initializing match {match_id}")
         self.matches[match_id] = match
         
         print(f"[MatchManager] Created match {match_id}")
@@ -111,8 +112,11 @@ class MatchManager:
                 await self._broadcast_world_state()
                 
                 # Check if match should end
-                if self.active_match.state.name == "FINISHED":
-                    self.end_match(self.active_match.match_id)
+            if self.active_match and self.active_match.state == MatchState.FINISHED:
+                match_id = self.active_match.match_id
+                self.end_match(match_id)
+                print(f"[MatchManager] Match {match_id} has ended")
+                continue
             else:
                 # No active match, slow down loop
                 await asyncio.sleep(0.1)
@@ -131,18 +135,28 @@ class MatchManager:
         if not self.active_match:
             return
         
-        # Serialize match state
-        state_data = self.active_match.get_state_dict()
-        
-        # Create world state packet
-        world_packet = WorldState(
-            players=state_data["players"],
-            projectiles=[],  # TODO: Add projectiles
-            zone_data=state_data["zone"]
-        )
-        
-        # Broadcast to all clients
-        await self.server.socket.broadcast(world_packet)
+        try:
+            state_data = self.active_match.get_state_dict()
+            
+            # DEBUG: Print first broadcast to verify data
+            if self.active_match.tick_count == 1:
+                print(f"[DEBUG] First world state broadcast:")
+                print(f"  Players: {len(state_data['players'])}")
+                for p in state_data['players']:
+                    print(f"    - {p['username']}: cooldowns={p.get('skill_cooldowns', 'MISSING')}")
+            
+            world_packet = WorldState(
+                players=state_data["players"],
+                projectiles=state_data.get("projectiles", []),
+                zone_data=state_data["zone"]
+            )
+            
+            await self.server.socket.broadcast(world_packet)
+            
+        except Exception as e:
+            print(f"[MatchManager] ERROR broadcasting world state: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _get_winner(self, match: Match) -> Optional[dict]:
         """Get match winner information."""

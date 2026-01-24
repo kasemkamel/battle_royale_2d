@@ -7,6 +7,7 @@ Loads on server startup and provides skill definitions.
 from shared.skill_system import (
     SkillshotSkill, AOESkill, RangeBasedSkill, HomingSkill,
     ChannelingSkill, DefensiveSkill, PassiveSkill, CrowdControlSkill,
+    HealSkill, DisappearSkill, DashSkill, ManaRegainSkill,
     CrowdControlType
 )
 from typing import Dict, List, Optional
@@ -268,6 +269,126 @@ class SkillDatabase:
             cooldown=18.0
         )
         
+        # ==================== HEAL SKILLS ====================
+        
+        self.skills["healing_touch"] = HealSkill(
+            skill_id="healing_touch",
+            name="Healing Touch",
+            heal_amount=50,
+            radius=0,  # Self only
+            mana_cost=30,
+            cooldown=10.0,
+            self_only=True
+        )
+        
+        self.skills["healing_wave"] = HealSkill(
+            skill_id="healing_wave",
+            name="Healing Wave",
+            heal_amount=40,
+            radius=200,  # Heal allies in radius
+            mana_cost=40,
+            cooldown=15.0,
+            self_only=False
+        )
+        
+        self.skills["regeneration"] = HealSkill(
+            skill_id="regeneration",
+            name="Regeneration",
+            heal_amount=80,
+            radius=0,
+            mana_cost=25,
+            cooldown=20.0,
+            self_only=True
+        )
+        
+        # ==================== DISAPPEAR SKILLS ====================
+        
+        self.skills["shadow_step"] = DisappearSkill(
+            skill_id="shadow_step",
+            name="Shadow Step",
+            duration=3.0,
+            mana_cost=40,
+            cooldown=20.0,
+            speed_bonus=1.3  # 30% faster while invisible
+        )
+        
+        self.skills["vanish"] = DisappearSkill(
+            skill_id="vanish",
+            name="Vanish",
+            duration=2.0,
+            mana_cost=30,
+            cooldown=15.0,
+            speed_bonus=1.5  # 50% faster
+        )
+        
+        self.skills["smoke_bomb"] = DisappearSkill(
+            skill_id="smoke_bomb",
+            name="Smoke Bomb",
+            duration=4.0,
+            mana_cost=50,
+            cooldown=25.0,
+            speed_bonus=1.2
+        )
+        
+        # ==================== DASH SKILLS ====================
+        
+        self.skills["blink"] = DashSkill(
+            skill_id="blink",
+            name="Blink",
+            dash_distance=400,
+            mana_cost=25,
+            cooldown=8.0,
+            instant=True  # Teleport
+        )
+        
+        self.skills["quick_dash"] = DashSkill(
+            skill_id="quick_dash",
+            name="Quick Dash",
+            dash_distance=300,
+            mana_cost=20,
+            cooldown=6.0,
+            instant=False  # Fast movement
+        )
+        
+        self.skills["shadow_dash"] = DashSkill(
+            skill_id="shadow_dash",
+            name="Shadow Dash",
+            dash_distance=500,
+            mana_cost=35,
+            cooldown=12.0,
+            instant=True # Teleport
+        )
+        
+        # ==================== MANA REGAIN SKILLS ====================
+        
+        self.skills["mana_potion"] = ManaRegainSkill(
+            skill_id="mana_potion",
+            name="Mana Potion",
+            mana_amount=50,
+            mana_cost=0,
+            cooldown=30.0,
+            over_time=False  # Instant
+        )
+        
+        self.skills["meditation"] = ManaRegainSkill(
+            skill_id="meditation",
+            name="Meditation",
+            mana_amount=60,
+            mana_cost=0,
+            cooldown=45.0,
+            over_time=True,
+            duration=5.0  # Restore over 5 seconds
+        )
+        
+        self.skills["mana_surge"] = ManaRegainSkill(
+            skill_id="mana_surge",
+            name="Mana Surge",
+            mana_amount=80,
+            mana_cost=0,
+            cooldown=60.0,
+            over_time=False
+        )
+        
         print(f"[SkillDB] Loaded {len(self.skills)} skills")
     
     def get_skill(self, skill_id: str) -> Optional[any]:
@@ -292,7 +413,7 @@ class SkillDatabase:
                 "description": skill.description
             }
             for skill in self.skills.values()
-            if skill.category.name == category 
+            if skill.category.name == category
         ]
     
     def create_skill_instance(self, skill_id: str) -> Optional[any]:

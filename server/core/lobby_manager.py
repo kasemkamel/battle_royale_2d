@@ -105,35 +105,32 @@ class LobbyManager:
         """Start the match with current lobby players."""
         print(f"[Lobby] Starting match with {len(self.players)} players")
         
-        # Create match and transfer players
         match = self.server.match_manager.create_match()
         
         for player in list(self.players.values()):
-            # Load player's skills from their user account
             user = self.server.authenticator.get_session(player.user_id)
             if user:
-                # Load skills into player - CREATE NEW INSTANCES
-                player.skills = []  # Clear any existing skills
-                
+                # 1. Load skills
+                player.skills = []
                 for skill_id in user.skill_loadout:
-                    # Get base skill from database
                     base_skill = self.server.skill_database.get_skill(skill_id)
                     if base_skill:
-                        # Create a NEW instance for this player (deep copy)
-                        # This ensures each player has independent cooldown states
                         import copy
                         skill_instance = copy.deepcopy(base_skill)
                         player.skills.append(skill_instance)
                 
                 print(f"[Lobby] Loaded {len(player.skills)} skills for {player.username}")
+                
+                # 2. Apply passive bonuses AFTER skills are loaded
+                player.apply_passive_bonuses()
             
             match.add_player(player)
-        
-        # Clear lobby (players are now in match, will return after match ends)
-        self.players.clear()
-        self.match_starting = False
-        self.countdown_start = None
-        
+            
+            # Clear lobby (players are now in match, will return after match ends)
+            self.players.clear()
+            self.match_starting = False
+            self.countdown_start = None
+            
         # Start the match
         self.server.match_manager.start_match(match.match_id)
     

@@ -1,4 +1,5 @@
 # client/ui/screens/game_lobby.py
+# -*- coding: utf-8 -*-
 """
 Game Lobby Screen
 Pre-game lobby with player list and start game button.
@@ -7,6 +8,7 @@ Pre-game lobby with player list and start game button.
 import pygame
 from client.ui.ui_manager import UIScreen, Button
 from shared.constants import SCREEN_WIDTH, SCREEN_HEIGHT, UI_BG_COLOR
+
 
 
 class GameLobbyScreen(UIScreen):
@@ -29,10 +31,12 @@ class GameLobbyScreen(UIScreen):
         self.profile_button = Button(
             280, SCREEN_HEIGHT - 70, 120, 50, "Profile", self.go_to_profile
         )
-        
+        # Settings button image
+        gear_img = pygame.image.load("assets/ui/gear.png").convert_alpha()
+        gear_img = pygame.transform.smoothscale(gear_img, (32, 32))
         # Settings button
         self.settings_button = Button(
-            410, SCREEN_HEIGHT - 70, 120, 50, "Settings", self.go_to_settings
+            SCREEN_WIDTH - 80, 20, 60, 50,"", image = gear_img, callback= self.go_to_settings
         )
         
         # Ready/Start button

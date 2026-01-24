@@ -19,7 +19,10 @@ class SkillCategory(Enum):
     DEFENSIVE = auto()      # Shields/damage reduction
     PASSIVE = auto()        # Always active
     CROWD_CONTROL = auto()  # CC effects (can be combined with others)
-
+    HEAL = auto()           # Healing skills
+    DISAPPEAR = auto()      # Invisibility or teleportation
+    DASH = auto()           # Quick movement burst
+    MANA_REGAIN = auto()    # Mana restoration skills
 
 class CrowdControlType(Enum):
     """Types of crowd control effects."""
@@ -393,7 +396,7 @@ class ChannelingSkill(Skill):
             "start_y": caster.y,
             "direction_x": dx,
             "direction_y": dy,
-            "damage_per_second": self.damage_per_second,
+            "damage": self.damage_per_second * delta_time,
             "max_range": self.cast_range,
             "width": self.beam_width,
             "skill_id": self.skill_id,
@@ -512,5 +515,138 @@ class CrowdControlSkill(Skill):
             "radius": self.radius,
             "duration": self.cc_duration,
             "intensity": self.intensity,
+            "skill_id": self.skill_id
+        }
+
+
+class HealSkill(Skill):
+    """
+    Heal - Restore health to self or allies.
+    
+    Example: Healing Touch that restores 50 HP
+    """
+    
+    def __init__(self, skill_id: str, name: str, heal_amount: float = 50,
+                 radius: float = 0, mana_cost: float = 30, cooldown: float = 10.0,
+                 self_only: bool = True):
+        super().__init__(skill_id, name, SkillCategory.HEAL, 0, mana_cost,
+                        cooldown, radius, "Restore health")
+        
+        self.heal_amount = heal_amount
+        self.radius = radius  # 0 = self only, >0 = heal allies in radius
+        self.self_only = self_only
+    
+    def cast(self, caster_pos: Tuple[float, float], target_pos: Tuple[float, float], **kwargs):
+        """Cast healing effect."""
+        self.start_cooldown()
+        
+        return {
+            "type": "heal",
+            "heal_amount": self.heal_amount,
+            "center_x": caster_pos[0],
+            "center_y": caster_pos[1],
+            "radius": self.radius,
+            "self_only": self.self_only,
+            "skill_id": self.skill_id
+        }
+
+
+class DisappearSkill(Skill):
+    """
+    Disappear - Become invisible/untargetable for duration.
+    
+    Example: Shadow Step that makes player invisible for 3 seconds
+    """
+    
+    def __init__(self, skill_id: str, name: str, duration: float = 3.0,
+                 mana_cost: float = 40, cooldown: float = 20.0,
+                 speed_bonus: float = 1.3):
+        super().__init__(skill_id, name, SkillCategory.DISAPPEAR, 0, mana_cost,
+                        cooldown, 0, "Become invisible")
+        
+        self.duration = duration
+        self.speed_bonus = speed_bonus  # Move faster while invisible
+    
+    def cast(self, caster_pos: Tuple[float, float], target_pos: Tuple[float, float], **kwargs):
+        """Activate invisibility."""
+        self.start_cooldown()
+        
+        return {
+            "type": "disappear",
+            "duration": self.duration,
+            "speed_bonus": self.speed_bonus,
+            "activation_time": time.time(),
+            "skill_id": self.skill_id
+        }
+
+
+class DashSkill(Skill):
+    """
+    Dash - Quick movement in direction (skill version, different from basic dash).
+    
+    Example: Blink that teleports player short distance
+    """
+    
+    def __init__(self, skill_id: str, name: str, dash_distance: float = 300,
+                 mana_cost: float = 20, cooldown: float = 8.0,
+                 instant: bool = False):
+        super().__init__(skill_id, name, SkillCategory.DASH, 0, mana_cost,
+                        cooldown, dash_distance, "Quick dash")
+        
+        self.dash_distance = dash_distance
+        self.instant = instant  # True = teleport, False = fast movement
+    
+    def cast(self, caster_pos: Tuple[float, float], target_pos: Tuple[float, float], **kwargs):
+        """Perform dash movement."""
+        # Calculate direction
+        dx = target_pos[0] - caster_pos[0]
+        dy = target_pos[1] - caster_pos[1]
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        if distance == 0:
+            dx, dy = 1, 0
+        else:
+            dx /= distance
+            dy /= distance
+        
+        self.start_cooldown()
+        
+        return {
+            "type": "dash",
+            "direction_x": dx,
+            "direction_y": dy,
+            "distance": self.dash_distance,
+            "instant": self.instant,
+            "skill_id": self.skill_id
+        }
+
+
+class ManaRegainSkill(Skill):
+    """
+    Mana Regain - Restore mana immediately or over time.
+    
+    Example: Mana Potion that restores 50 mana instantly
+    """
+    
+    def __init__(self, skill_id: str, name: str, mana_amount: float = 50,
+                 mana_cost: float = 0, cooldown: float = 30.0,
+                 over_time: bool = False, duration: float = 5.0):
+        super().__init__(skill_id, name, SkillCategory.MANA_REGAIN, 0, mana_cost,
+                        cooldown, 0, "Restore mana")
+        
+        self.mana_amount = mana_amount
+        self.over_time = over_time
+        self.duration = duration  # If over_time, restore over this duration
+    
+    def cast(self, caster_pos: Tuple[float, float], target_pos: Tuple[float, float], **kwargs):
+        """Restore mana."""
+        self.start_cooldown()
+        
+        return {
+            "type": "mana_regain",
+            "mana_amount": self.mana_amount,
+            "over_time": self.over_time,
+            "duration": self.duration,
+            "activation_time": time.time(),
             "skill_id": self.skill_id
         }

@@ -14,6 +14,10 @@ class ProfileScreen(UIScreen):
     def __init__(self, manager):
         super().__init__(manager)
         
+        # Enable scrolling for profile
+        self.scrollable = True
+        self.scroll_start_y = 150
+        
         # Back button
         self.back_button = Button(
             20, SCREEN_HEIGHT - 70, 120, 50, "Back", self.go_back
@@ -23,9 +27,12 @@ class ProfileScreen(UIScreen):
         self.logout_button = Button(
             SCREEN_WIDTH - 140, SCREEN_HEIGHT - 70, 120, 50, "Logout", self.logout
         )
+        
+        # Estimate content height (will adjust based on actual stats)
+        self.set_content_height(600)
     
     def go_back(self):
-        """Navigate back to home."""
+        """Navigate back to lobby."""
         self.manager.switch_to("lobby")
     
     def logout(self):
@@ -35,6 +42,7 @@ class ProfileScreen(UIScreen):
     
     def handle_event(self, event: pygame.event.Event):
         """Handle events."""
+        super().handle_event(event)
         self.back_button.handle_event(event)
         self.logout_button.handle_event(event)
     
@@ -42,39 +50,54 @@ class ProfileScreen(UIScreen):
         """Render the profile screen."""
         screen.fill(UI_BG_COLOR)
         
-        # Title
+        # Title (fixed)
         title_font = pygame.font.Font(None, 64)
         title_surface = title_font.render("PROFILE", True, (255, 215, 0))
         title_rect = title_surface.get_rect(center=(SCREEN_WIDTH // 2, 80))
         screen.blit(title_surface, title_rect)
         
-        # Get game state
-        game_state = self.manager.game.game_state.get_state_dict()
+        # Begin scrollable region
+        self.begin_scrollable_region(screen)
         
-        # Display user info
-        y_offset = 180
+        # Render scrollable content
+        self._render_profile_content(screen)
+        
+        # End scrollable region
+        self.end_scrollable_region(screen)
+        
+        # Buttons (fixed)
+        self.back_button.render(screen)
+        self.logout_button.render(screen)
+    
+    def _render_profile_content(self, screen: pygame.Surface):
+        """Render scrollable profile content."""
+        y_offset = self.get_scrolled_y(180)
         font = pygame.font.Font(None, 36)
+        
+        game_state = self.manager.game.game_state.get_state_dict()
         
         if game_state.get("user_id"):
             # Username
-            username_text = f"Username: {game_state.get('username', 'N/A')}"
-            self._draw_text(screen, username_text, font, (255, 255, 255), SCREEN_WIDTH // 2, y_offset)
+            if self.is_visible(y_offset):
+                username_text = f"Username: {game_state.get('username', 'N/A')}"
+                self._draw_centered_text(screen, username_text, font, (255, 255, 255), y_offset)
             y_offset += 50
             
             # User ID
-            id_text = f"User ID: {game_state.get('user_id')}"
-            self._draw_text(screen, id_text, font, (200, 200, 200), SCREEN_WIDTH // 2, y_offset)
+            if self.is_visible(y_offset):
+                id_text = f"User ID: {game_state.get('user_id')}"
+                self._draw_centered_text(screen, id_text, font, (200, 200, 200), y_offset)
             y_offset += 80
             
-            # Stats
-            stats = game_state.get('stats', {})
-            
-            stats_title = font.render("STATISTICS", True, (255, 215, 0))
-            stats_rect = stats_title.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
-            screen.blit(stats_title, stats_rect)
+            # Stats title
+            if self.is_visible(y_offset):
+                stats_title = font.render("STATISTICS", True, (255, 215, 0))
+                stats_rect = stats_title.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
+                screen.blit(stats_title, stats_rect)
             y_offset += 60
             
             # Display stats
+            stats = game_state.get('stats', {})
             stat_items = [
                 ("Matches Played", stats.get('matches_played', 0)),
                 ("Wins", stats.get('wins', 0)),
@@ -84,21 +107,19 @@ class ProfileScreen(UIScreen):
             ]
             
             for label, value in stat_items:
-                text = f"{label}: {value}"
-                self._draw_text(screen, text, font, (255, 255, 255), SCREEN_WIDTH // 2, y_offset)
+                if self.is_visible(y_offset):
+                    text = f"{label}: {value}"
+                    self._draw_centered_text(screen, text, font, (255, 255, 255), y_offset)
                 y_offset += 45
         else:
             # Not logged in
-            not_logged_in = font.render("Not logged in", True, (255, 100, 100))
-            not_logged_rect = not_logged_in.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-            screen.blit(not_logged_in, not_logged_rect)
-        
-        # Buttons
-        self.back_button.render(screen)
-        self.logout_button.render(screen)
+            if self.is_visible(y_offset):
+                not_logged_in = font.render("Not logged in", True, (255, 100, 100))
+                not_logged_rect = not_logged_in.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
+                screen.blit(not_logged_in, not_logged_rect)
     
-    def _draw_text(self, screen, text, font, color, x, y):
+    def _draw_centered_text(self, screen, text, font, color, y):
         """Helper to draw centered text."""
         surface = font.render(str(text), True, color)
-        rect = surface.get_rect(center=(x, y))
+        rect = surface.get_rect(center=(SCREEN_WIDTH // 2, y))
         screen.blit(surface, rect)
